@@ -289,7 +289,7 @@ dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1
 </dialog>
 <dialog id="indexErrorDialog" aria-labelledby="indexErrorTitle"><h2 id="indexErrorTitle">Student index error</h2><p id="indexErrorMessage"></p><form method="dialog"><button autofocus>OK</button></form></dialog>
 <dialog id="instructionsDialog" aria-labelledby="instructionsTitle">
-  <h2 id="instructionsTitle">How to use the scanner</h2>
+  <h2 id="instructionsTitle" tabindex="-1" autofocus>How to use the scanner</h2>
 
   <h3>Before exam</h3>
   <ol>
@@ -319,7 +319,7 @@ dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1
     <li>Archive the final result files and keep the answer key for future reference or moderation.</li>
   </ol>
 
-  <form method="dialog"><button autofocus>Close</button></form>
+  <form method="dialog"><button>Close</button></form>
 </dialog>
 
 <main class="app-shell">
@@ -2390,7 +2390,12 @@ function showIndexError(message) {
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("issueFilters").addEventListener("change", renderIssueChecklist);
   document.getElementById("startAfresh").onclick = startAfresh;
-  document.getElementById("openInstructions").onclick = () => document.getElementById("instructionsDialog").showModal();
+  document.getElementById("openInstructions").onclick = () => {
+    const dialog = document.getElementById("instructionsDialog");
+    dialog.showModal();
+    document.getElementById("instructionsTitle").focus({preventScroll:true});
+    dialog.scrollTop = 0;
+  };
   const btnApplyId = document.getElementById("btnApplyId");
   if (btnApplyId) {
     btnApplyId.addEventListener("click", () => {
