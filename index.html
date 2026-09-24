@@ -1,0 +1,2697 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMS Reader — Your student directory</title>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- OpenCV.js -->
+<script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js"></script>
+
+<style>
+  :root{--muted:#94a3b8}
+  body{margin:0;padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b0f1e;color:#e5e7eb}
+  h1{margin:0 0 10px;font-size:20px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .card{background:#0e152b;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px}
+  .drop{display:grid;place-items:center;min-height:120px;border:2px dashed rgba(34,211,238,.5);border-radius:12px;cursor:pointer;background:rgba(34,211,238,.12)}
+  .drop.dragover{border-color:#22d3ee;background:rgba(34,211,238,.22)}
+  .small{font-size:12px;color:var(--muted)}
+  button{border:1px solid rgba(255,255,255,.2);background:#111827;color:#e5e7eb;border-radius:8px;padding:7px 12px;cursor:pointer}
+  button.primary{background:linear-gradient(180deg,#1f2937,#0e152b)}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  .viewer{margin-top:10px;display:flex;flex-direction:column;align-items:center}
+  #preview{max-width:95%;height:auto;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:#050814}
+  .viewer-large{margin-top:10px;display:flex;flex-direction:column;align-items:center}
+  #previewLarge{max-width:100%;height:auto;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:#050814}
+  .nav{margin-top:6px;display:flex;gap:10px;align-items:center}
+  pre.log{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;margin:0;max-height:380px;overflow:auto}
+  label{user-select:none}
+  .pill{padding:3px 8px;border:1px solid rgba(255,255,255,.15);border-radius:999px}
+  code{color:#cbd5e1}
+  .link-pill{display:inline-block;padding:6px 10px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:#111827;color:#22d3ee;text-decoration:none}
+  .link-pill:hover{border-color:#22d3ee;color:#67e8f9}
+  textarea{width:100%;min-height:100px;background:#0a0f1e;color:#cbd5e1;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px}
+
+  /* Generic CTA highlight for any element */
+  .cta {
+    border-color: #22d3ee !important;
+    box-shadow: 0 0 0 2px rgba(34,211,238,.55), 0 0 14px rgba(34,211,238,.45);
+    position: relative;
+    animation: ctaPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes ctaPulse {
+    0%   { box-shadow: 0 0 0 2px rgba(34,211,238,.55), 0 0 6px rgba(34,211,238,.35); transform: scale(1.00); }
+    50%  { box-shadow: 0 0 0 2px rgba(34,211,238,.75), 0 0 16px rgba(34,211,238,.55); transform: scale(1.02); }
+    100% { box-shadow: 0 0 0 2px rgba(34,211,238,.55), 0 0 6px rgba(34,211,238,.35); transform: scale(1.00); }
+  }
+
+  /* Print (A4) */
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    body { background: #fff; color: #000; }
+    .row, .viewer, #out, #status, #keyStatus, #reportPreview { display: none !important; }
+    #printArea { display: block !important; }
+    .print-sheet { display: block !important; }
+  }
+  .print-sheet { display: none; background: #fff; color: #000; }
+  .print-sheet .header { font-size: 14px; margin-bottom: 8px; }
+  .print-sheet .sub { color: #444; font-size: 12px; margin-top: 2px; }
+  .print-sheet h2 { margin: 0 0 8px; font-size: 16px; color: #111; }
+  .print-sheet table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .print-sheet th, .print-sheet td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+  .print-sheet th { background: #f2f2f2; }
+  .print-sheet .ok { color: #16a34a; font-weight: 600; }
+  .print-sheet .bad { color: #dc2626; font-weight: 600; }
+
+  /* On-screen multi-page preview shells */
+  .report-preview { margin-top: 10px; padding: 8px; background: #0b0f1e; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; }
+  .report-page { width: 210mm; min-height: 297mm; background: #fff; color: #000; margin: 10px auto; box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 6px 18px rgba(0,0,0,.3); padding: 12mm; }
+  .report-page h2 { margin: 0 0 8px; font-size: 16px; color: #111; }
+  .report-page .sub { color: #444; font-size: 12px; margin: 2px 0 8px; }
+  .report-page table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .report-page th, .report-page td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+  .report-page th { background: #f2f2f2; }
+  .report-page .ok { color: #16a34a; font-weight: 600; }
+  .report-page .bad { color: #dc2626; font-weight: 600; }
+
+  /* Refined application UI */
+  :root {
+    color-scheme: dark;
+    --bg: #07101d;
+    --surface: #0d1929;
+    --surface-2: #111f32;
+    --line: rgba(148, 163, 184, .16);
+    --text: #f4f7fb;
+    --muted: #91a2b8;
+    --accent: #2dd4bf;
+    --accent-strong: #14b8a6;
+    --accent-soft: rgba(45, 212, 191, .11);
+    --danger: #fb7185;
+  }
+  * { box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    padding: 0;
+    background:
+      radial-gradient(circle at 8% -10%, rgba(45,212,191,.13), transparent 31rem),
+      radial-gradient(circle at 93% 6%, rgba(59,130,246,.10), transparent 28rem),
+      var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .app-header {
+    border-bottom: 1px solid var(--line);
+    background: rgba(7,16,29,.74);
+    backdrop-filter: blur(18px);
+  }
+  .app-header-inner, .app-shell { width: min(1480px, calc(100% - 40px)); margin: 0 auto; }
+  .app-header-inner { min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(45,212,191,.28); border-radius: 13px; background: linear-gradient(145deg, rgba(45,212,191,.2), rgba(59,130,246,.12)); color: #99f6e4; box-shadow: inset 0 1px rgba(255,255,255,.1); }
+  .brand-mark svg { width: 23px; height: 23px; }
+  h1 { margin: 0; font-size: 18px; line-height: 1.25; letter-spacing: -.02em; }
+  .brand-copy p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+  .app-shell { padding: 26px 0 44px; }
+  .top-actions { display: flex; align-items: center; justify-content:flex-end; flex-wrap:wrap; gap: 12px; }
+  .privacy-note { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .privacy-note::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(45,212,191,.1); }
+  .row { display: grid; grid-template-columns: minmax(330px, .78fr) minmax(500px, 1.35fr); gap: 18px; align-items: start; }
+  .card { padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(17,31,50,.93), rgba(11,24,40,.96)); box-shadow: 0 18px 45px rgba(0,0,0,.16), inset 0 1px rgba(255,255,255,.025); }
+  .card > strong, .section-title { font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
+  .step-heading { display:flex; align-items:center; gap:10px; margin:0; font-size:17px; line-height:1.35; }
+  .step-number { display:inline-grid; place-items:center; flex:0 0 32px; height:32px; border-radius:50%; background:var(--accent); color:#04211e; font-size:16px; font-weight:750; }
+  .step-divider { margin-top:22px; padding-top:20px; border-top:1px solid var(--line); }
+  .section-kicker { display: block; margin-bottom: 5px; color: var(--accent); font-size: 11px; font-weight: 750; letter-spacing: .11em; text-transform: uppercase; }
+  .small { color: var(--muted); font-size: 12px; }
+  button, .link-pill, select, input, textarea { font: inherit; }
+  button, .link-pill { min-height: 38px; padding: 8px 13px; border: 1px solid var(--line); border-radius: 10px; background: rgba(148,163,184,.07); color: #dce6f2; font-weight: 620; transition: border-color .18s ease, background .18s ease, transform .18s ease, color .18s ease; }
+  button:hover:not(:disabled), .link-pill:hover { border-color: rgba(45,212,191,.48); background: rgba(45,212,191,.09); color: #ecfffb; transform: translateY(-1px); }
+  button:focus-visible, .link-pill:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(45,212,191,.18); outline-offset: 2px; border-color: var(--accent); }
+  button.primary { border-color: transparent; background: linear-gradient(135deg, #2dd4bf, #14b8a6); color: #04211e; box-shadow: 0 8px 22px rgba(20,184,166,.18); }
+  button.primary:hover:not(:disabled) { border-color: transparent; background: linear-gradient(135deg, #5eead4, #2dd4bf); color: #03211d; }
+  button:disabled { opacity: .42; }
+  .link-pill { display: inline-flex; align-items: center; text-decoration: none; }
+  textarea, input, select { border: 1px solid var(--line); border-radius: 10px; background: rgba(4,12,23,.62); color: var(--text); }
+  textarea { min-height: 116px; margin-top: 12px; padding: 12px 13px; resize: vertical; line-height: 1.55; }
+  input, select { min-height: 36px; padding: 6px 9px; }
+  .pill { display: inline-flex; min-height: 38px; align-items: center; padding: 4px 6px 4px 11px; border-color: var(--line); border-radius: 10px; background: rgba(4,12,23,.38); }
+  .drop { min-height: 176px; margin-top: 16px !important; border: 1.5px dashed rgba(45,212,191,.4); border-radius: 15px; background: linear-gradient(145deg, rgba(45,212,191,.07), rgba(59,130,246,.035)); }
+  .drop:hover, .drop.dragover { border-color: var(--accent); background: rgba(45,212,191,.12); }
+  .drop-icon { width: 44px; height: 44px; margin: 0 auto 11px; display: grid; place-items: center; border-radius: 13px; background: rgba(45,212,191,.12); color: #5eead4; font-size: 21px; }
+  .drop-title { font-weight: 670; color: #eefcf9; }
+  .drop-separator { margin: 4px 0; color: #65778e; font-size: 11px; }
+  #status { display: inline-flex; align-items: center; min-height: 28px; margin-left: 0 !important; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; background: rgba(148,163,184,.06); }
+  #status::before { content: ""; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--accent); }
+  .issue-checklist { list-style:none; padding:0; margin:6px 0 0; max-height:380px; overflow:auto; font-size:12px; }
+  .issue-checklist li { display:flex; align-items:baseline; gap:8px; margin:6px 0; overflow-wrap:anywhere; }
+  .issue-checklist .issue-symbol { flex:none; font-size:18px; color:#fbbf24; }
+  .issue-checklist .resolved { color:var(--muted); }
+  .issue-checklist .resolved .issue-symbol { color:#4ade80; }
+  .issue-filters { display:flex; flex-wrap:wrap; gap:4px 12px; flex-basis:100%; border:0; padding:0; margin:0; font-size:12px; }
+  .issue-filters label { display:flex; align-items:center; gap:5px; }
+  .issue-filters input { min-height:0; margin:0; accent-color:var(--accent); }
+  #issues:empty::before { content: attr(data-empty-message); color: #63758c; }
+  #summary:empty::before { content: "Process a PDF to see the student summary."; color: #63758c; }
+  #out:empty::before { content: "Processed records will appear here."; color: #63758c; }
+  pre.log { padding: 12px; border: 1px solid rgba(148,163,184,.1); border-radius: 11px; background: rgba(3,10,20,.48); color: #c9d6e5; }
+  #studentArea { margin-top: 15px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: rgba(3,10,20,.34); }
+  .student-area-toolbar { min-height: 54px; margin: 0 !important; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  #studentSheetPanel, #studentSummaryPanel { padding: 12px; }
+  #studentSheetCanvas { display: block; border-radius: 9px; background: #fff; }
+  #dlRow:empty { display: none; }
+  .review-controls { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; }
+  .control-group { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin:0; }
+  .review-card button, .review-card .link-pill, .review-card select, .review-card input:not([type="checkbox"]) { min-height:30px; padding:4px 7px; font-size:12px; }
+  .review-card button, .review-card .link-pill, .control-group label { white-space:nowrap; }
+  #studentSearchForm { margin:0; }
+  #studentNameSearch { width:145px; min-width:100px; }
+  .review-card .student-area-toolbar { min-height:42px; flex-wrap:wrap; gap:6px 12px !important; padding:6px 8px; }
+  #studentResolved:empty { display:none; }
+  #resultsSection [aria-pressed="true"] { border-color:#64748b; background:#253347; color:#f1f5f9; font-weight:650; }
+  .report-action-ready {
+    border-color: rgba(34, 197, 94, 0.8) !important;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(16, 185, 129, 0.12)) !important;
+    color: #dcfce7 !important;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.38), 0 8px 18px rgba(34, 197, 94, 0.12);
+  }
+  .report-action-ready:hover:not(:disabled) {
+    border-color: rgba(34, 197, 94, 1) !important;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.28), rgba(16, 185, 129, 0.2)) !important;
+  }
+  code { color: #a7f3d0; }
+  .all-results { margin-top: 18px !important; }
+  .all-results #out { min-height: 74px; }
+  @media (max-width: 980px) {
+    .row { grid-template-columns: 1fr; }
+    .row > .card { min-width: 0 !important; }
+  }
+  @media (max-width: 640px) {
+    .app-header-inner, .app-shell { width: min(100% - 24px, 1480px); }
+    .app-header-inner { padding: 14px 0; align-items: flex-start; flex-direction: column; gap: 12px; }
+    .top-actions { width: 100%; justify-content: space-between; }
+    .privacy-note { display: none; }
+    .app-shell { padding-top: 14px; }
+    .card { padding: 15px; border-radius: 15px; }
+    .report-page { width: 100%; min-height: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1px solid #43506b;border-radius:16px;padding:24px;background:#101f32;color:#f4f7fb;box-shadow:0 24px 80px #0008}dialog::backdrop{background:#0009}dialog h2{margin-top:0;font-size:20px}dialog li{margin:8px 0}dialog a{color:#5eead4}dialog form{display:flex;justify-content:flex-end;margin-top:18px}
+  .tutorial-guide { position:fixed; z-index:1000; right:20px; bottom:20px; width:360px; max-width:calc(100vw - 24px); max-height:calc(100dvh - 24px); box-sizing:border-box; overflow:auto; padding:16px; border:1px solid #2dd4bf88; border-radius:14px; background:#133536; box-shadow:0 16px 48px #0007; }
+  .tutorial-guide[hidden] { display:none; }
+  #tutorialHandle { flex:1; cursor:grab; touch-action:none; user-select:none; border-radius:4px; }
+  #tutorialHandle:active { cursor:grabbing; }
+  #tutorialHandle:focus-visible { outline:2px solid #5eead4; outline-offset:3px; }
+  .tutorial-drag-hint { display:block; margin-top:4px; font-size:11px; color:#abd5cf; }
+  .tutorial-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  #tutorialMessage { font-size:13px; line-height:1.6; margin:10px 0; }
+  .tutorial-focus { outline:3px solid #5eead4 !important; outline-offset:4px; box-shadow:0 0 0 7px #2dd4bf20 !important; scroll-margin:100px; }
+  .issue-checklist li.priority-id { padding:9px; border-left:3px solid #fbbf24; border-radius:5px; background:#fbbf2414; color:#fde68a; }
+  @media print { .tutorial-guide { display:none; } .tutorial-focus { outline:none !important; box-shadow:none !important; } }
+  #studentDirectory > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none; }
+  #studentDirectory > summary::-webkit-details-marker { display:none; }
+  #studentDirectory > summary .step-heading { margin:0; flex-wrap:wrap; }
+  #studentDirectory > summary:focus-visible { outline:2px solid var(--accent); outline-offset:6px; border-radius:4px; }
+  .directory-toggle-hint { color:var(--muted); font-size:12px; white-space:nowrap; }
+  .directory-toggle-hint::after { content:"Show setup ▾"; }
+  #studentDirectory[open] .directory-toggle-hint::after { content:"Hide setup ▴"; }
+</style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-FSRBCRECMR"></script>
+<script type="text/csv" id="embeddedStudentList">CLASS,STUDENT,ID
+</script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-FSRBCRECMR');
+  </script>
+<style id="studentReportStyles">
+.student-report { color:#172033; color-scheme:light; }
+.report-page.student-report { width:100%; max-width:210mm; min-height:0; padding:24px; box-sizing:border-box; }
+.student-report .report-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; border-bottom:2px solid #0f766e; padding-bottom:12px; margin-bottom:12px; }
+.student-report .report-heading h2 { font-size:22px; margin:0; color:#172033; }
+.student-report .report-score { text-align:right; white-space:nowrap; color:#0f766e; font-size:20px; font-weight:700; }
+.student-report .report-score small { display:block; font-size:11px; color:#526174; font-weight:400; }
+.student-report .sub { line-height:1.5; overflow-wrap:anywhere; }
+.student-report table { table-layout:fixed; margin-top:14px; }
+.student-report th, .student-report td { text-align:center; padding:4px 6px; border-color:#dbe2e8; }
+.student-report th { background:#edf3f5; color:#334155; font-size:11px; }
+.student-report tbody tr:nth-child(even) { background:#f8fafc; }
+.student-report tr { break-inside:avoid; }
+.student-report .report-note { font-size:10px; color:#64748b; margin-top:10px; }
+</style>
+<style>.markscan-logo{display:block;width:76px;height:auto;flex-shrink:0}.app-credit{display:flex;justify-content:center;gap:8px 20px;flex-wrap:wrap;padding:22px 16px;border-top:1px solid rgba(148,163,184,.18);color:#94a3b8;font-size:12px;text-align:center}.app-credit span:last-child{white-space:nowrap}@media print{.app-credit{display:none}}</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header-inner">
+    <div class="brand">
+      <img class="markscan-logo" src="./markscanlogosmall.png" alt="MarkScan logo" onerror="this.hidden=true; this.nextElementSibling.hidden=false">
+      <span class="brand-logo-fallback" hidden>MarkScan</span>
+      <div class="brand-copy">
+        <h1>Optical Mark Sheet Scanner</h1>
+        <p>Grade answer sheets using your own student directory</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="privacy-note">Your uploaded data stays in your browser</span>
+      <button id="openInstructions" type="button">Instructions</button>
+      <button id="openTutorial" type="button" aria-controls="tutorialGuide" aria-expanded="false">Guided setup</button>
+      <button id="startAfresh" type="button" style="border-color:#fb7185;color:#fda4af">Start afresh</button>
+    </div>
+  </div>
+</header>
+<section id="tutorialGuide" class="tutorial-guide" role="dialog" aria-modal="false" aria-labelledby="tutorialTitle" hidden>
+  <div class="tutorial-heading">
+    <div id="tutorialHandle" tabindex="0" role="button" aria-label="Move guided setup. Drag or use arrow keys." title="Drag to move, or focus and use arrow keys">
+      <strong id="tutorialTitle">Guided setup</strong><span class="tutorial-drag-hint">⠿ Drag to move</span>
+    </div>
+    <button id="tutorialClose" type="button" class="small" aria-label="Close guided setup">✕</button>
+  </div>
+  <p id="tutorialMessage" role="status" aria-live="polite"></p>
+  <button id="tutorialLocate" type="button" class="small">Show me</button>
+  <button id="tutorialConfirmExport" type="button" class="small" hidden></button>
+  <button id="tutorialConfirmDirectory" type="button" class="small" hidden>Use saved student directory</button>
+  <button id="tutorialConfirmTitle" type="button" class="small" hidden>Continue</button>
+</section>
+
+<dialog id="confirmActionDialog" aria-labelledby="confirmActionTitle" aria-describedby="confirmActionMessage">
+  <h2 id="confirmActionTitle">Confirm action</h2>
+  <p id="confirmActionMessage"></p>
+  <form method="dialog" style="display:flex;justify-content:flex-end;gap:8px">
+    <button value="cancel" autofocus>Cancel</button>
+    <button id="confirmActionButton" value="confirm">Confirm</button>
+  </form>
+</dialog>
+<dialog id="indexErrorDialog" aria-labelledby="indexErrorTitle"><h2 id="indexErrorTitle">Student index error</h2><p id="indexErrorMessage"></p><form method="dialog"><button autofocus>OK</button></form></dialog>
+<dialog id="instructionsDialog" aria-labelledby="instructionsTitle">
+  <h2 id="instructionsTitle">How to use the scanner</h2>
+
+  <h3>Before exam</h3>
+  <ol>
+    <li>Open the <a href="template-editor.html" target="_blank" rel="noopener">template editor</a> to customise the sheet title, school / department heading, shading instructions, and index number instructions. Select <strong>Show school heading</strong> if you want that heading printed; it is invisible in the original template.</li>
+    <li>Check the <strong>Live print preview</strong>. Text wraps inside the original instruction boxes and shrinks to fit. If a fit warning appears, shorten the text or remove blank lines before downloading. All bubbles, tables, and registration marks remain in their original positions.</li>
+    <li>Click <strong>Download PDF</strong> in the editor, then print the downloaded sheet on <strong>A4 at Actual size / 100%</strong>. Check a printed copy before making the full set. You can also print the unchanged <a href="OMS template.pdf" target="_blank" rel="noopener">optical mark sheet template</a>.</li>
+    <li>The editor saves your text in the current browser. Use <strong>Restore original</strong> to return to the supplied template text. The sheet title in the editor is separate from the <strong>Exam paper title</strong> used for scanner reports; set both as needed.</li>
+    <li>Set the correct answer key in the app, confirm the number of questions, and save it before the exam starts.</li>
+    <li>Expand <strong>Step 1: Upload student directory</strong> above the answer key, then click <strong>Download student CSV template</strong>. Fill in the CLASS, STUDENT, and ID columns, then use <strong>Upload student CSV</strong>. Keep four-character IDs as text in your spreadsheet. Check the loaded student count and list before processing; a successful upload is saved in this browser and replaces the previous directory.</li>
+    <li>Use the <a href="calibration.html" target="_blank" rel="noopener">calibration page</a> if the sheet layout needs adjusting for a different printout or scanner setup.</li>
+  </ol>
+
+  <h3>During exam</h3>
+  <ol>
+    <li>Distribute the answer sheets and instruct students to fill in their IDs and answers carefully.</li>
+    <li>Students must shade their index number in the format <strong>Class + number</strong>, for example <strong>2E05</strong> or <strong>1A12</strong>, using the correct letter and two-digit number.</li>
+    <li>Collect the completed sheets and scan them as PDF files into the app.</li>
+    <li>Process the PDF files, then review each sheet using the next/previous controls and the name search to confirm student IDs.</li>
+    <li>Correct any wrong or missing student IDs or answer selections before final scoring.</li>
+  </ol>
+
+  <h3>After exam</h3>
+  <ol>
+    <li>Review the score summary and student reports to check for any incorrect markings or matching issues.</li>
+    <li>Use question analysis or edit results to fix errors and then save the final data.</li>
+    <li>Export the results as CSV, download raw scan data, or print individual or all student reports.</li>
+    <li>Archive the final result files and keep the answer key for future reference or moderation.</li>
+  </ol>
+
+  <form method="dialog"><button autofocus>Close</button></form>
+</dialog>
+
+<main class="app-shell">
+
+<p class="small" role="note" style="margin:0 0 16px;padding:12px 16px;border:1px solid var(--line);border-radius:12px"><strong>Your data stays on your device.</strong> Uploaded student lists and scanned answer sheets are processed locally in your browser. Their contents are not uploaded to the internet or sent to a server. Saved student lists, answer keys, and results are stored only in this browser, not in cloud storage. Use <strong>Start afresh</strong> to clear this app’s saved data. Downloaded files remain on your device.</p>
+
+<details id="studentDirectory" class="card" style="margin-bottom:16px" aria-labelledby="studentDirectoryTitle">
+  <summary class="directory-summary"><h2 id="studentDirectoryTitle" class="step-heading"><span class="step-number">1</span> Upload student directory <span class="small">First-time setup</span></h2><span class="directory-toggle-hint" aria-hidden="true"></span></summary>
+  <p class="small"><strong>Complete this setup once before your first use.</strong> Download the CSV template, fill in your students, and upload the completed file. Your saved directory loads automatically on future visits in this browser.</p>
+  <div class="control-group">
+    <button id="downloadStudentTemplate" type="button">Download student CSV template</button>
+    <label for="studentListFile">Upload student CSV</label>
+    <input id="studentListFile" type="file" accept=".csv,text/csv" aria-describedby="studentCSVHelp studentDirectoryStatus">
+  </div>
+  <p class="small"><strong>Private and local:</strong> Your CSV is read and saved in this browser only. Student names and IDs are not sent to a server.</p>
+  <p id="studentCSVHelp" class="small">Required columns: <strong>CLASS, STUDENT, ID</strong>. Use one row per student, for example <code>1A,Alex Tan,1A01</code>. IDs must be unique and exactly four letters or digits; the first two characters identify the class. In Excel, format the ID column as <strong>Text</strong> before entering IDs to preserve values such as <code>0501</code> and <code>2E05</code>, then save as CSV UTF-8.</p>
+  <p class="small">You do not need to upload the list for every exam. Reopen this section only to update your student list, or to set it up again in a different browser or after clearing saved data. A new upload replaces the saved directory. This version stores its directory, answer key, and results separately from the original scanner.</p>
+  <p id="studentDirectoryStatus" class="small" role="status" aria-live="polite">No students loaded. Upload your completed CSV before processing answer sheets.</p>
+  <details id="studentDirectoryPreview" hidden><summary>View loaded students</summary><div style="max-height:260px;overflow:auto"><table style="width:100%;text-align:left"><thead><tr><th scope="col">Class</th><th scope="col">Student</th><th scope="col">ID</th></tr></thead><tbody id="studentDirectoryRows"></tbody></table></div></details>
+</details>
+
+
+<div class="row">
+  <!-- Answer Key -->
+  <div class="card" style="flex:1 1 360px;min-width:320px">
+    <h2 class="step-heading"><span class="step-number">2</span> Set the answer key</h2>
+    <div class="small" style="margin-top:6px">
+      Enter the correct answers, choose the number of questions, then click <strong>Save answer key</strong>. Use <strong>X</strong> to void a question; it is excluded from scores and the maximum mark.
+    </div>
+    <label for="examTitle" class="small" style="display:block;margin-top:12px">Exam paper title</label>
+    <input id="examTitle" class="tutorial-focus" type="text" maxlength="200" placeholder="2026 IP4 Physics EOY Paper 1" style="width:100%;box-sizing:border-box;margin:6px 0" aria-describedby="examTitleHelp">
+    <div id="examTitleHelp" class="small">Saved automatically and shown on all reports.</div>
+    <textarea id="ansPaste" placeholder="e.g. A X C D ... or AXCD... (X = void)"></textarea>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <!-- MCQs to record moved up -->
+      <label class="small pill">Number of questions
+        <input id="mcqCount" type="number" value="30" min="1" max="45" style="width:64px;margin-left:6px" fdprocessedid="kq7i0b">
+      </label>
+      <button id="btnSaveKey" fdprocessedid="v3q6at">Save answer key</button>
+      <button id="btnClearKey" fdprocessedid="uw5uxk">Clear answer key</button>
+      <span id="keyStatus" class="small" style="margin-left:auto" aria-live="polite">Not saved</span>
+    </div>
+
+
+    <h2 class="step-heading step-divider"><span class="step-number">3</span> Upload answer sheets</h2>
+    <p class="small" style="margin:6px 0 0">Select or drop your scanned PDF files below, then click <strong>Process PDFs</strong>. Files are read locally; their contents are not uploaded to a server.</p>
+    <div id="drop" class="drop" style="margin-top:10px">
+      <div style="text-align:center">
+        <div class="drop-icon" aria-hidden="true">↥</div>
+        <div class="drop-title">Drop PDF files here</div>
+        <div class="drop-separator">Select one or more scanned answer sheets</div>
+        <!-- Hide the native file input to avoid duplicate UI -->
+        <input id="file" type="file" accept="application/pdf" multiple style="display:none">
+        <div style="margin-top:8px">
+          <button id="btnPickPDF" class="small">Choose PDF files</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Processing and download controls -->
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+      <button id="btnProcess" class="primary" disabled="">Process PDFs</button>
+      <button id="btnCSV" disabled="">Download raw scan data</button>
+
+      <!-- Status moved here, near Process PDF -->
+      <span class="small" id="status" style="margin-left:8px" role="status" aria-live="polite">Ready</span>
+       <!-- Issues log -->
+      <div style="margin-top:10px; flex-basis:100%"><strong>Processing issues</strong></div>
+      <fieldset id="issueFilters" class="issue-filters">
+        <legend class="small">Show issue types — uncheck to hide</legend>
+        <label><input type="checkbox" value="blank" checked> Missing answers</label>
+        <label><input type="checkbox" value="multi" checked> Multiple answers</label>
+        <label><input type="checkbox" value="id" checked> Missing / unknown IDs</label>
+        <label><input type="checkbox" value="duplicate" checked> Duplicate IDs</label>
+        <label><input type="checkbox" value="processing" checked> Processing failures</label>
+      </fieldset>
+      <div style="margin-top:10px; flex-basis:100%"><ul id="issues" class="issue-checklist" data-empty-message="No issues detected yet." aria-live="polite"></ul></div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card review-card" style="flex:2 1 540px;min-width:420px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h2 class="step-heading"><span class="step-number">4</span> Review student sheets</h2>
+      <span class="small">Detected responses: <code>filename;ID;answers...</code></span>
+    </div>
+    <p class="small" style="margin:8px 0">Check each scanned sheet, correct student IDs or answers when needed, then print or download the student reports.</p>
+    <div class="review-controls">
+      <form id="studentSearchForm" class="control-group">
+        <label class="small" for="studentNameSearch">Find student</label>
+        <input id="studentNameSearch" type="search" placeholder="Search by name" aria-describedby="studentSearchStatus" disabled>
+        <button type="submit" id="btnSearchStudent" disabled>Find</button>
+      </form>
+      <div class="control-group">
+        <label class="small" for="idOverride">Correct student ID</label>
+        <input id="idOverride" type="text" style="width:76px">
+        <button id="btnApplyId" class="small">Apply</button>
+        <button id="viewEntriesInline" class="small" type="button">View results</button>
+      </div>
+      <div class="control-group">
+        <button id="btnOpenPDF" class="small" title="Print this student report as PDF">Print current report</button>
+        <button id="printMarkedCurrent" class="small" type="button" disabled>Print current marked sheet</button>
+        <button id="printMarkedAll" class="small" type="button" disabled>Print all marked sheets</button>
+        <button id="btnDownloadAll" class="small" title="Print all student reports as PDF">Print all reports</button>
+      </div>
+    </div>
+    <div id="studentSearchStatus" class="small" role="status" style="margin-top:4px">Loading student list…</div>
+    <ul id="studentSearchResults" style="margin:4px 0 0;padding-left:18px;max-height:160px;overflow:auto;font-size:12px" hidden></ul>
+    <div class="small" id="studentResolved"></div>
+    <div id="dlRow" style="margin-top:6px"></div>
+
+    <div style="margin-top:8px">
+      <strong>Current student summary</strong>
+      <pre id="summary" class="log" style="margin-top:6px"></pre>
+    </div>
+
+    <!-- Student preview area — insert dropdown + two panels -->
+    <div id="studentArea">
+      <div class="student-area-toolbar" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <label for="previewMode" style="font-weight:600;">Preview:</label>
+        <select id="previewMode" fdprocessedid="2o4gjg">
+          <option value="sheet">Scanned sheet</option>
+          <option value="marked" selected>Scanned sheet (marked)</option>
+          <option value="summary">Student report</option>
+        </select>
+        <div class="control-group">
+        <button id="prevBtn" fdprocessedid="3r7lxq">⬅ Prev</button>
+        <span class="small">Page <span id="pageNum">0</span> / <span id="pageCount">0</span></span>
+        <button id="nextBtn" fdprocessedid="9nk2xp">Next ➡</button>
+        </div>
+      </div>
+
+      <!-- Student summary panel (existing content) -->
+      <div id="studentSummaryPanel" style="display: none;">
+        <div id="reportPreview" class="report-preview"></div>
+      </div>
+
+      <!-- Scanned sheet panel (new canvas, hidden by default) -->
+      <div id="studentSheetPanel" style="">
+        <div id="markedSheetStatus" class="small" role="status" style="margin-bottom:8px" hidden></div>
+        <canvas id="studentSheetCanvas" style="max-width:100%; width:100%; height:auto;"></canvas>
+      </div>
+    </div>
+    <div id="printArea" class="print-sheet"></div>
+  </div>
+
+  <!-- Controls + Preview -->
+  <!-- Controls + Preview card removed -->
+</div>
+
+<section id="resultsSection" class="card all-results" style="margin-top:16px">
+  <h2 class="step-heading"><span class="step-number">5</span> Analyze and export results</h2>
+  <p class="small">Review question performance by class, compare class averages, edit student results, and export graded results. Saved edits update the review section automatically.</p>
+  <div class="control-group" style="margin-bottom:12px" role="group" aria-label="Results views">
+    <button id="showQuestionSummary" type="button" aria-pressed="true">Question analysis</button>
+    <button id="showClassSummary" type="button" aria-pressed="false">Class performance</button>
+    <button id="showResultsEditor" type="button" aria-pressed="false">Edit results</button>
+    <button id="downloadItemAnalysis" type="button">Save item analysis PDF</button>
+    <button id="downloadStudentEntries" type="button">Download student entries CSV</button>
+    <button id="btnClearResults" class="small">Clear saved results</button>
+  </div>
+  <iframe id="integratedSummary" title="Item analysis" scrolling="no" style="width:100%;height:300px;border:0;border-radius:12px"></iframe>
+  <iframe id="integratedClasses" title="Class overall performance" style="width:100%;height:75vh;border:0;border-radius:12px" hidden></iframe>
+  <iframe id="integratedEditor" title="Edit student results and export CSV" style="width:100%;height:75vh;border:0;border-radius:12px" hidden></iframe>
+  <details style="margin-top:10px"><summary class="small">Raw scan data</summary><pre id="out" class="log" style="margin-top:8px"></pre></details>
+</section>
+
+</main>
+
+<script>
+/* ===== PDF.js worker ===== */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+/* ===== Canonical frame ===== */
+const FID_W = 2100, FID_H = 2970;
+
+/* ===== DEFAULT TEMPLATE ===== */
+const TEMPLATE = {
+  "fiducial_frame": { "width": 2100, "height": 2970 },
+  "index": {
+    "top": 0.268, "left": 0.3671, "width": 0.6295, "height": 0.1502,
+    "rows": 4, "cols": 16, "innerR": 0.3,
+    "corners": [
+      {"x":0.3671,"y":0.268},
+      {"x":0.9967,"y":0.268},
+      {"x":0.998891339983259,"y":0.42255891742128315},
+      {"x":0.3688913399832589,"y":0.42356901843138417}
+    ]
+  },
+  "mcq": [
+    {
+      "top":0.4508,"left":0.0514,"width":0.2229,"height":0.503,
+      "rows":15,"cols":4,"innerR":0.32,
+      "corners":[{"x":0.0567,"y":0.4522},{"x":0.2743,"y":0.4508},{"x":0.2729,"y":0.9539},{"x":0.0514,"y":0.9539}]
+    },
+    {
+      "top":0.4522,"left":0.3943,"width":0.2181,"height":0.5054,
+      "rows":15,"cols":4,"innerR":0.32,
+      "corners":[{"x":0.3962,"y":0.4545},{"x":0.6105,"y":0.4522},{"x":0.6124,"y":0.9576},{"x":0.3943,"y":0.9576}]
+    },
+    {
+      "top":0.4522,"left":0.7305,"width":0.22,"height":0.504,
+      "rows":15,"cols":4,"innerR":0.32,
+      "corners":[{"x":0.7305,"y":0.4559},{"x":0.9505,"y":0.4522},{"x":0.9486,"y":0.9539},{"x":0.7305,"y":0.9562}]
+    }
+  ],
+  "ringWeight": 0.72,
+  "ringFactor": 1.7,
+  "outIndexW": 1600,
+  "outIndexH": 260,
+  "outMCQW": 520,
+  "outMCQH": 900,
+  "crop": { "left": 0, "right": 0, "top": 0, "bottom": 0 },
+  "mcqBottomHalfOnly": true,
+  "mcqBubbleCenterFrac": 0.75
+};
+
+// ===== Constants & UI =====
+const DIGITS16 = ["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F"];
+const ABCD = ["A","B","C","D"];
+const $ = s => document.querySelector(s);
+const statusEl = $("#status"), outEl = $("#out"), preview = $("#preview"), previewLarge = $("#previewLarge");
+const dbg = $("#dbg");
+let PDF = null, results = [], currentPage = 1, cvReady = false, loadedFileName = "pages", lastCSVUrl = null;
+let studentMap = new Map();
+let pageSummaries = [];          // per-page summary meta
+let idOverrides = new Map();     // per-page ID overrides
+let savedAnswerKey = null;       // saved/confirmed answer key (array of letters)
+
+// Track issues across runs and detect duplicate IDs across pages/PDFs
+let issues = [];
+const issueHistory = new Map();
+const processingFailures = new Map();
+const seenStudentIds = new Set();
+
+// Cache all loaded PDFs and page canvases
+const docs = []; // [{ pdf, numPages, baseOffset, fileName }]
+let totalPages = 0;
+const pageCanvases = []; // global page index => Canvas
+
+// Map a global page index to its document and local page number
+function globalIndexToDocPage(idx) {
+  let remaining = idx;
+  for (let i = 0; i < docs.length; i++) {
+    const d = docs[i];
+    if (remaining <= d.numPages) {
+      return { docIndex: i, pageInDoc: remaining, entry: d };
+    }
+    remaining -= d.numPages;
+  }
+  return null;
+}
+
+// Render a specific page from a specific doc (used during processing)
+async function renderDocPageCanvas(pdfDoc, pageNumberInDoc, scale = Math.max(2.8, 2.0 * devicePixelRatio)) {
+  const page = await pdfDoc.getPage(pageNumberInDoc);
+  const vp = page.getViewport({ scale });
+  const c = document.createElement("canvas");
+  c.width = vp.width;
+  c.height = vp.height;
+  await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  return c;
+}
+
+// Get or build the canvas for a global page index (used for previews)
+async function getCanvasForGlobalPage(globalIndex, scale = 1.2) {
+  if (pageCanvases[globalIndex]) return pageCanvases[globalIndex];
+  const map = globalIndexToDocPage(globalIndex);
+  if (!map) return null;
+  const { entry, pageInDoc } = map;
+  const page = await entry.pdf.getPage(pageInDoc);
+  const vp = page.getViewport({ scale });
+  const c = document.createElement("canvas");
+  c.width = vp.width;
+  c.height = vp.height;
+  await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  pageCanvases[globalIndex] = c;
+  return c;
+}
+
+/* ===== Persistence for "All results" ===== */
+const LS_RESULTS_KEY = "oms2.results";
+const LS_ANSWER_KEY = "oms2.answerKey";
+const LS_STUDENTS_KEY = "oms2.students";
+const LS_EXAM_TITLE = "oms2.examTitle";
+let examTitle = "";
+try { examTitle = localStorage.getItem(LS_EXAM_TITLE) || ""; } catch {}
+function escapeReportText(value) {
+  return String(value).replace(/[&<>"']/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]));
+}
+function refreshExamTitle() {
+  document.getElementById("examTitle").value = examTitle;
+  renderCurrentReportPreview(currentPage);
+  document.getElementById("integratedSummary").contentWindow?.refreshExamTitle?.(examTitle);
+}
+document.addEventListener("DOMContentLoaded", () => {
+  refreshExamTitle();
+  document.getElementById("examTitle").addEventListener("input", event => {
+    examTitle = event.target.value;
+    try { localStorage.setItem(LS_EXAM_TITLE, examTitle); } catch (error) { console.warn("Could not save exam title", error); }
+    renderCurrentReportPreview(currentPage);
+    document.getElementById("integratedSummary").contentWindow?.refreshExamTitle?.(examTitle);
+  });
+});
+function loadStoredResults() {
+  try {
+    const raw = localStorage.getItem(LS_RESULTS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(arr)) {
+      results = arr;
+      outEl.textContent = results.join("\n");
+      const btnCSVEl = document.getElementById("btnCSV");
+      if (btnCSVEl) btnCSVEl.disabled = results.length === 0;
+    }
+  } catch (e) {
+    console.warn("Failed to load stored results:", e);
+    results = [];
+  }
+}
+function saveStoredResults() {
+  try {
+    localStorage.setItem(LS_RESULTS_KEY, JSON.stringify(results));
+  } catch (e) {
+    console.warn("Failed to save stored results:", e);
+  }
+}
+
+/* ===== UI wiring ===== */
+function setStatus(s){ statusEl.textContent = s; }
+["dragenter","dragover"].forEach(evt => $("#drop").addEventListener(evt, e=>{ e.preventDefault(); $("#drop").classList.add("dragover"); }));
+["dragleave","drop"].forEach(evt => $("#drop").addEventListener(evt, e=>{ e.preventDefault(); $("#drop").classList.remove("dragover"); }));
+$("#drop").addEventListener("drop", e=>{
+  const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+  processSelectedPDFs(files);
+});
+
+// Add: resilient file chooser handlers
+async function onFileChosen(e) {
+  try {
+    const input = e.target;
+    const files = input?.files ? Array.from(input.files) : [];
+    if (!files.length) {
+      setStatus("No file selected.");
+      return;
+    }
+    await processSelectedPDFs(files);
+    input.value = "";
+  } catch (err) {
+    console.error("Error handling file selection:", err);
+    setStatus("Failed to read selected file.");
+  }
+}
+
+async function processSelectedPDFs(files) {
+  const pdfFiles = Array.from(files || []).filter(file =>
+    file && (file.type === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf"))
+  );
+  if (!pdfFiles.length) {
+    setStatus("No PDF files selected.");
+    return;
+  }
+
+  setStatus(`Loading ${pdfFiles.length} PDF${pdfFiles.length === 1 ? "" : "s"}…`);
+  let loadedCount = 0;
+  for (const file of pdfFiles) {
+    loadedFileName = file.name;
+    if (await loadPDF(file)) loadedCount++;
+  }
+  setStatus(loadedCount
+    ? `${loadedCount} PDF${loadedCount === 1 ? "" : "s"} loaded. Ready to process.`
+    : "No PDFs could be loaded."
+  );
+  updateTutorial();
+}
+
+// Direct binding if the input exists
+const fileInputEl = document.getElementById("file");
+if (fileInputEl) {
+  fileInputEl.addEventListener("change", onFileChosen);
+} else {
+  // Delegated binding as a fallback (handles re-rendered inputs)
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t && t.id === "file" && t.type === "file") {
+      onFileChosen(e);
+    }
+  });
+}
+
+// Button to programmatically open the file picker
+const btnPickPDF = document.getElementById("btnPickPDF");
+if (btnPickPDF) {
+  btnPickPDF.onclick = () => {
+    const el = document.getElementById("file");
+    if (!el) {
+      setStatus("File input not found.");
+      return;
+    }
+    el.click();
+  };
+}
+
+// Make the entire drop area clickable (opens file chooser)
+const dropEl = document.getElementById("drop");
+if (dropEl) {
+  dropEl.addEventListener("click", (e) => {
+    // Avoid double-trigger when clicking the explicit button
+    if (e.target && e.target.id === "btnPickPDF") return;
+    const el = document.getElementById("file");
+    if (el) el.click();
+  });
+}
+const prevBtnEl = document.getElementById("prevBtn");
+if (prevBtnEl) prevBtnEl.onclick = ()=>{ if(PDF && currentPage>1){ currentPage--; renderPreview(); } };
+const nextBtnEl = document.getElementById("nextBtn");
+if (nextBtnEl) nextBtnEl.onclick = ()=>{ if(currentPage < totalPages){ currentPage++; renderPreview(); } };
+const btnProcessEl = document.getElementById("btnProcess");
+if (btnProcessEl) btnProcessEl.onclick = ()=>processPDF();
+const btnCSVEl = document.getElementById("btnCSV");
+if (btnCSVEl) btnCSVEl.onclick = ()=>downloadCSV();
+
+
+// Load any stored results on startup
+loadStoredResults();
+
+// Clear stored results button
+const btnClearResults = document.getElementById("btnClearResults");
+if (btnClearResults) {
+  btnClearResults.onclick = async () => {
+    if (!await confirmAction("Clear stored results?", "This removes all saved student results and the issue history. Export any results you want to keep first. Your answer key and student list will remain.", "Clear results")) return;
+    try { localStorage.removeItem(LS_RESULTS_KEY); } catch {}
+    results = [];
+    pageSummaries = [];
+    idOverrides.clear();
+    renderPreview();
+    outEl.textContent = "";
+    if (btnCSVEl) btnCSVEl.disabled = true;
+    // Clear issues and seen IDs
+    issues = [];
+    issueHistory.clear();
+    processingFailures.clear();
+    seenStudentIds.clear();
+    const issuesEl = document.getElementById("issues");
+    if (issuesEl) renderIssueChecklist();
+    setStatus("Cleared stored results.");
+  };
+}
+
+// Add: dropdown wiring to toggle student area
+const previewModeSel = document.getElementById("previewMode");
+if (previewModeSel) {
+  previewModeSel.onchange = () => updateStudentArea();
+  // Default to scanned sheet on load
+  previewModeSel.value = "marked";
+  // Initialize panels visibility on load
+  updateStudentArea();
+  // Initialize the CTA sequence on load
+  initCTASequence();
+}
+
+// New helper: toggle student area panels based on dropdown mode
+function updateStudentArea(){
+  const mode = document.getElementById("previewMode")?.value || "summary";
+  document.getElementById("markedSheetStatus").hidden = mode !== "marked";
+  const summaryPanel = document.getElementById("studentSummaryPanel");
+  const sheetPanel = document.getElementById("studentSheetPanel");
+
+  if (summaryPanel && sheetPanel) {
+    if (mode === "sheet" || mode === "marked") {
+      summaryPanel.style.display = "none";
+      sheetPanel.style.display = "";
+      // If a PDF is loaded, ensure the scanned sheet is shown
+      if (typeof PDF !== "undefined" && PDF) {
+        renderPreview();
+      }
+    } else if (mode === "summary") {
+      sheetPanel.style.display = "none";
+      summaryPanel.style.display = "";
+      if (typeof renderCurrentReportPreview === "function") {
+        renderCurrentReportPreview(currentPage);
+      }
+    }
+  }
+}
+
+/* ===== PDF helpers ===== */
+async function loadPDF(file){
+  try{
+    setStatus("Loading PDF…");
+    const buf=await file.arrayBuffer();
+    const newDoc = await pdfjsLib.getDocument({data:buf}).promise;
+    PDF = newDoc; // keep latest doc available for processing
+    const numPages = newDoc.numPages;
+
+    // Register this doc and increase combined page count
+    const baseOffset = totalPages;
+    docs.push({ pdf: newDoc, numPages, baseOffset, fileName: loadedFileName || "pages", processed: false });
+    totalPages += numPages;
+
+    const btnProcessEl = document.getElementById("btnProcess");
+    if (btnProcessEl) btnProcessEl.disabled=false;
+
+    // Show combined page count; jump to the first page of the newly added doc
+    const pageCountEl = document.getElementById("pageCount");
+    if (pageCountEl) pageCountEl.textContent = totalPages;
+    currentPage = baseOffset + 1;
+
+    await renderPreview();
+    setStatus("Loaded. Ready.");
+    return true;
+  }catch(e){ console.error(e); setStatus("Failed to load PDF."); return false; }
+}
+async function renderPreview(){
+  if(totalPages === 0) return;
+  const requestedPage = currentPage;
+
+  const mode = document.getElementById("previewMode")?.value || "summary";
+
+  if (mode === "sheet" || mode === "marked") {
+    const sheetCanvas = document.getElementById("studentSheetCanvas");
+    if (!sheetCanvas) {
+      console.warn("Student sheet canvas #studentSheetCanvas not found — skipping render.");
+    } else {
+      const srcCanvas = await getCanvasForGlobalPage(requestedPage);
+      if (requestedPage !== currentPage || mode !== document.getElementById("previewMode").value) return;
+      if (srcCanvas) {
+        sheetCanvas.width = srcCanvas.width;
+        sheetCanvas.height = srcCanvas.height;
+        const ctx = sheetCanvas.getContext("2d");
+        ctx.clearRect(0, 0, sheetCanvas.width, sheetCanvas.height);
+        ctx.drawImage(srcCanvas, 0, 0);
+        if (mode === "marked") drawMarkedSheet(sheetCanvas, pageSummaries[requestedPage]);
+        else { document.getElementById("markedSheetStatus").hidden = true; drawIndexOverride(sheetCanvas, pageSummaries[requestedPage]); }
+      }
+    }
+  } else if (mode === "summary") {
+    if (typeof renderCurrentReportPreview === "function") {
+      renderCurrentReportPreview(currentPage);
+    }
+  } else {
+    // analysis: nothing to render inside the student area
+  }
+
+  // Update page indicator against combined total
+  const pageNumEl = document.getElementById("pageNum");
+  if (pageNumEl) pageNumEl.textContent = currentPage;
+  const pageCountEl = document.getElementById("pageCount");
+  if (pageCountEl) pageCountEl.textContent = totalPages;
+
+  if (typeof renderSummaryForPage === "function") {
+    renderSummaryForPage(currentPage);
+  }
+}
+async function renderPageCanvas(n, scale=Math.max(2.8, 2.0*devicePixelRatio)){
+  const page=await PDF.getPage(n);
+  const vp=page.getViewport({scale});
+  const c=document.createElement("canvas"); c.width=vp.width; c.height=vp.height;
+  await page.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+  return c;
+}
+
+/* ===== OpenCV ready gate ===== */
+(function waitCV(){ if(typeof cv==="undefined"||!cv.imread){ setTimeout(waitCV,150); return; } cvReady=true; setStatus("Ready. Load a PDF."); })();
+
+/* ===== Helpers ===== */
+function canvasToMat(c){ return cv.imread(c); }
+function fracPtsToPx(c){ return c.map(p=>({x:Math.round(p.x*FID_W), y:Math.round(p.y*FID_H)})); }
+
+/* ===== Fiducials & warp ===== */
+function detectCornerSquares(srcMat){
+  const iw=srcMat.cols, ih=srcMat.rows;
+  let gray=new cv.Mat(), bin=new cv.Mat();
+  cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY, 0);
+  cv.GaussianBlur(gray, gray, new cv.Size(5,5), 0);
+  cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  let contours=new cv.MatVector(), hier=new cv.Mat();
+  cv.findContours(bin, contours, hier, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+  const cand=[];
+  for(let i=0;i<contours.size();i++){
+    const r=cv.boundingRect(contours.get(i));
+    const area=r.width*r.height;
+    if(area<(iw*ih)*0.00002 || area>(iw*ih)*0.01) continue;
+    const ratio=r.width/r.height; if(ratio<0.8||ratio>1.25) continue;
+    const roi=bin.roi(r); const fill=cv.mean(roi)[0]/255; roi.delete();
+    if(fill<0.6) continue;
+    cand.push({ cx:r.x+r.width/2, cy:r.y+r.height/2, rect:r });
+  }
+  contours.delete(); hier.delete(); gray.delete(); bin.delete();
+
+  function pick(tx,ty){
+    let best=null, bestD=1e18, bestIdx=-1;
+    cand.forEach((p,i)=>{ const d=(p.cx-tx)**2+(p.cy-ty)**2; if(d<bestD){ bestD=d; best=p; bestIdx=i; }});
+    if(bestIdx>=0) cand.splice(bestIdx,1);
+    return best;
+  }
+
+  const TL=pick(0,0), TR=pick(iw,0), BR=pick(iw,ih), BL=pick(0,ih);
+  if(!TL||!TR||!BR||!BL) return null;
+
+  return {
+    pTL:{x:TL.rect.x, y:TL.rect.y},
+    pTR:{x:TR.rect.x+TR.rect.width, y:TR.rect.y},
+    pBR:{x:BR.rect.x+BR.rect.width, y:BR.rect.y+BR.rect.height},
+    pBL:{x:BL.rect.x, y:BL.rect.y+BL.rect.height}
+  };
+}
+function edgeFitWarp(src){
+  const c=detectCornerSquares(src);
+  if(!c){
+    let warped=new cv.Mat();
+    cv.resize(src, warped, new cv.Size(FID_W, FID_H));
+    return { warped, invH: null, srcW: src.cols, srcH: src.rows };
+  }
+  const srcPts=cv.matFromArray(4,1,cv.CV_32FC2,new Float32Array([
+    c.pTL.x,c.pTL.y, c.pTR.x,c.pTR.y, c.pBR.x,c.pBR.y, c.pBL.x,c.pBL.y
+  ]));
+  const dstPts=cv.matFromArray(4,1,cv.CV_32FC2,new Float32Array([0,0, FID_W,0, FID_W,FID_H, 0,FID_H]));
+  const H=cv.getPerspectiveTransform(srcPts,dstPts);
+  let warped=new cv.Mat();
+  cv.warpPerspective(src, warped, H, new cv.Size(FID_W,FID_H));
+  const Hinv=cv.getPerspectiveTransform(dstPts, srcPts);
+  srcPts.delete(); dstPts.delete(); H.delete();
+  return { warped, invH: Hinv, srcW: src.cols, srcH: src.rows };
+}
+
+/* ===== Region warp & crop ===== */
+function warpRegion(warpedFull, cornersFrac, outW, outH){
+  const pts = fracPtsToPx(cornersFrac);
+  const srcPts = cv.matFromArray(4,1,cv.CV_32FC2,new Float32Array([
+    pts[0].x,pts[0].y, pts[1].x,pts[1].y, pts[2].x,pts[2].y, pts[3].x,pts[3].y
+  ]));
+  const dstPts = cv.matFromArray(4,1,cv.CV_32FC2,new Float32Array([0,0, outW,0, outW,outH, 0,outH]));
+  const H = cv.getPerspectiveTransform(srcPts, dstPts);
+  let out = new cv.Mat();
+  cv.warpPerspective(warpedFull, out, H, new cv.Size(outW, outH));
+  srcPts.delete(); dstPts.delete(); H.delete();
+  return out;
+}
+// Map the actual sampled bubble positions back through both perspective transforms.
+function buildAnswerLocations(block, rowBands, colCenters, radius, cropWidth, invH, srcW, srcH) {
+  const corners = fracPtsToPx(block.corners);
+  const region = cv.matFromArray(4, 1, cv.CV_32FC2,
+    [0, 0, TEMPLATE.outMCQW, 0, TEMPLATE.outMCQW, TEMPLATE.outMCQH, 0, TEMPLATE.outMCQH]);
+  const frame = cv.matFromArray(4, 1, cv.CV_32FC2, corners.flatMap(p => [p.x, p.y]));
+  const transform = cv.getPerspectiveTransform(region, frame);
+  const h = Array.from(transform.data64F);
+  const inverse = invH ? Array.from(invH.data64F) : null;
+  region.delete(); frame.delete(); transform.delete();
+  const project = (matrix, x, y) => {
+    const d = matrix[6]*x + matrix[7]*y + matrix[8];
+    return [(matrix[0]*x + matrix[1]*y + matrix[2])/d,
+      (matrix[3]*x + matrix[4]*y + matrix[5])/d];
+  };
+  const ring = (x, y, rx, ry) => Array.from({length:48}, (_, i) => {
+    const angle = i * Math.PI * 2 / 48;
+    const [fx, fy] = project(h,
+      x + rx*Math.cos(angle) + Math.round(TEMPLATE.outMCQW*TEMPLATE.crop.left),
+      y + ry*Math.sin(angle) + Math.round(TEMPLATE.outMCQH*TEMPLATE.crop.top));
+    const [sx, sy] = inverse ? project(inverse, fx, fy) : [fx*srcW/FID_W, fy*srcH/FID_H];
+    return [sx/srcW, sy/srcH];
+  });
+  return rowBands.map(([top, bottom]) => {
+    const y = Math.round(top + TEMPLATE.mcqBubbleCenterFrac*(bottom-top+1));
+    return {
+      correction: ring(TEMPLATE.outMCQW - Math.round(TEMPLATE.outMCQW * TEMPLATE.crop.left) + radius * 2.5, y, 0, 0)[0],
+      bubbles: colCenters.map(x => ring(x, y, radius*1.6, radius*1.6)),
+      blank: ring(cropWidth/2, y, cropWidth/2, radius*1.6)
+    };
+  });
+}
+
+// Score square coordinates in the original OMS PDF, mapped through the detected
+// registration frame. Keep the scan untouched; annotations exist only in this view.
+function buildScoreBox(invH, srcW, srcH) {
+  const h = invH ? Array.from(invH.data64F) : null;
+  return [[369,149.9],[426,149.9],[369,207.6]].map(([px,py]) => {
+    if (!h) return [px/595.32,py/841.92];
+    const x=(px-35.64)/(559.2-35.64)*FID_W, y=(py-35.64)/(817.2-35.64)*FID_H;
+    const d=h[6]*x+h[7]*y+h[8];
+    return [(h[0]*x+h[1]*y+h[2])/d/srcW,(h[3]*x+h[4]*y+h[5])/d/srcH];
+  });
+}
+function buildIndexLocations(invH, srcW, srcH) {
+  const region=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,TEMPLATE.outIndexW,0,TEMPLATE.outIndexW,TEMPLATE.outIndexH,0,TEMPLATE.outIndexH]);
+  const frame=cv.matFromArray(4,1,cv.CV_32FC2,fracPtsToPx(TEMPLATE.index.corners).flatMap(p=>[p.x,p.y]));
+  const transform=cv.getPerspectiveTransform(region,frame),h=Array.from(transform.data64F),inverse=invH?Array.from(invH.data64F):null;
+  region.delete();frame.delete();transform.delete();
+  const project=(m,x,y)=>{const d=m[6]*x+m[7]*y+m[8];return[(m[0]*x+m[1]*y+m[2])/d,(m[3]*x+m[4]*y+m[5])/d];};
+  const cw=TEMPLATE.outIndexW/TEMPLATE.index.cols,rh=TEMPLATE.outIndexH/TEMPLATE.index.rows;
+  return Array.from({length:4},(_,row)=>DIGITS16.map((_,col)=>Array.from({length:40},(_,i)=>{
+    const angle=i*Math.PI*2/40;
+    const [x,y]=project(h,(col+.5)*cw+Math.cos(angle)*cw*.17,(row + (row === 3 ? .50 : row === 2 ? .60 : .70))*rh+Math.sin(angle)*rh*.12);
+    const [sx,sy]=inverse?project(inverse,x,y):[x*srcW/FID_W,y*srcH/FID_H];return[sx/srcW,sy/srcH];
+  })));
+}
+function drawIndexOverride(canvas,meta) {
+  if(!meta?.indexLocations || !meta.correctedIndex)return;
+  const ctx=canvas.getContext("2d");ctx.save();ctx.fillStyle="rgba(220,0,0,0.75)";ctx.strokeStyle="#d00000";ctx.lineWidth=Math.max(1,canvas.width/800);
+  [...meta.correctedIndex].forEach((character,row)=>{
+    const points=meta.indexLocations[row]?.[DIGITS16.indexOf(character)];if(!points)return;
+    ctx.beginPath();points.forEach(([x,y],i)=>ctx[i?"lineTo":"moveTo"](x*canvas.width,y*canvas.height));ctx.closePath();ctx.fill();ctx.stroke();
+  });ctx.restore();
+}
+function drawMarkedSheet(canvas, meta, options = {}) {
+  drawIndexOverride(canvas,meta);
+  const status=options.quiet ? {} : document.getElementById("markedSheetStatus");status.hidden=false;
+  if (!meta?.answerLocations || !meta.scoreBox) {status.textContent="Process this PDF to show marking and the score.";return;}
+  const key=options.key || getAnswerKey(),ctx=canvas.getContext("2d"),w=canvas.width,h=canvas.height;
+  let earned=0,total=0,wrong=0;
+  ctx.save();ctx.strokeStyle="#d00000";ctx.fillStyle="#d00000";ctx.lineWidth=Math.max(1.5,w/500);ctx.lineCap="round";
+  const drawCorrection = (location, text) => {
+    if(location?.correction){
+      const first=location.bubbles[0],last=location.bubbles.at(-1);
+      const centre=ring=>ring.reduce((out,p)=>[out[0]+p[0]/ring.length,out[1]+p[1]/ring.length],[0,0]);
+      const start=centre(first),end=centre(last),angle=Math.atan2((end[1]-start[1])*h,(end[0]-start[0])*w);
+      const size=Math.max(8,(Math.max(...first.map(p=>p[1]))-Math.min(...first.map(p=>p[1])))*h*.85);
+      ctx.save();ctx.translate(location.correction[0]*w,location.correction[1]*h);ctx.rotate(angle);
+      ctx.font=`bold ${size}px Arial`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,0,0);ctx.restore();
+    }
+  };
+  key.forEach((correct,i)=>{
+    if(!correct)return;
+    if(correct==="X"){drawCorrection(meta.answerLocations[i], "void");return;}
+    total++;
+    const answer=meta.finalAnswers[i]||"";
+    if(answer===correct){earned++;return;}
+    wrong++;
+    const location=meta.answerLocations[i];if(!location)return;
+    const rings=answer.split("+").map(letter=>location.bubbles[ABCD.indexOf(letter)]).filter(Boolean);
+    // Cross every selected circle; a blank answer crosses all four options.
+    const targets=answer ? rings : location.bubbles;
+    for(const points of targets){
+      const xs=points.map(p=>p[0]*w),ys=points.map(p=>p[1]*h);
+      const x=(Math.min(...xs)+Math.max(...xs))/2,y=(Math.min(...ys)+Math.max(...ys))/2;
+      const r=Math.max(3,(Math.max(...ys)-Math.min(...ys))*.5);
+      ctx.beginPath();ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y+r);ctx.moveTo(x+r,y-r);ctx.lineTo(x-r,y+r);ctx.stroke();
+    }
+    drawCorrection(location, correct);
+  });
+  if(total){
+    const [a,b,c]=meta.scoreBox.map(([x,y])=>[x*w,y*h]);
+    ctx.save();ctx.transform((b[0]-a[0])/100,(b[1]-a[1])/100,(c[0]-a[0])/100,(c[1]-a[1])/100,a[0],a[1]);
+    ctx.font="bold 30px Arial";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(String(earned),30,29,48);ctx.fillText(String(total),71,73,48);ctx.restore();
+  }
+  ctx.restore();
+  status.textContent=total?`Marked sheet: ${earned}/${total}. ${wrong} wrong answer${wrong===1?"":"s"}; correct answers appear outside the right edge of each answer box. Score box: earned marks above the diagonal, total marks below. Voided questions are excluded.`:"No scored questions. Save an answer key with at least one non-voided question.";
+}
+
+function cropInside(mat){
+  const {left,right,top,bottom}=TEMPLATE.crop;
+  const x = Math.round(mat.cols*left);
+  const y = Math.round(mat.rows*top);
+  const w = Math.round(mat.cols*(1-left-right));
+  const h = Math.round(mat.rows*(1-top-bottom));
+  return mat.roi(new cv.Rect(x,y,w,h));
+}
+
+/* ===== Binarize & morphology ===== */
+function binarize(img){
+  let gray=new cv.Mat(); cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY, 0);
+  cv.GaussianBlur(gray, gray, new cv.Size(3,3), 0);
+  let bin=new cv.Mat();
+  cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  gray.delete();
+  return bin; // ink=255
+}
+function refineBinary(bin) {
+  const kOpen  = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(2,2));
+  const kClose = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3,3));
+  let tmp = new cv.Mat(), out = new cv.Mat();
+  cv.morphologyEx(bin, tmp,  cv.MORPH_OPEN,  kOpen);
+  cv.morphologyEx(tmp, out,  cv.MORPH_CLOSE, kClose);
+  kOpen.delete(); kClose.delete(); tmp.delete();
+  return out;
+}
+
+/* ===== Donut (index helper) ===== */
+function buildDonutKernel(rIn, rOut, ringWeight){
+  const k = 2*rOut+1, mat = new cv.Mat.zeros(k,k,cv.CV_32F);
+  const c=rOut;
+  for(let y=0;y<k;y++){
+    for(let x=0;x<k;x++){
+      const dx=x-c, dy=y-c; const d=dx*dx+dy*dy;
+      let v=0;
+      if(d<=rIn*rIn) v=1.0;
+      else if(d<=rOut*rOut) v=-ringWeight;
+      mat.floatPtr(y,x)[0]=v;
+    }
+  }
+  const mean=cv.mean(mat)[0];
+  for(let y=0;y<k;y++) for(let x=0;x<k;x++) mat.floatPtr(y,x)[0]-=mean;
+  return mat;
+}
+
+/* ===== Row bands (for bottom-half scanning) ===== */
+function computeRowBands(rows, cropRows) {
+  const bands = [];
+  for (let i = 0; i < rows; i++) {
+    const yTop = Math.round((i / rows) * cropRows);
+    const yBottom = Math.round(((i + 1) / rows) * cropRows) - 1;
+    bands.push([yTop, Math.max(yTop, yBottom)]);
+  }
+  return bands;
+}
+
+/* ===== MCQ decision (multi-select, bottom-half only) ===== */
+function decideMCQMultiInkBottom(bin, rowBands, colCenters, rCount, thrMul = 1.0, centerFrac = 0.75, bottomHalfOnly = true) {
+  const rowsOut = [];
+  for (let r = 0; r < rowBands.length; r++) {
+    const [yTop, yBottom] = rowBands[r];
+    const bandH = Math.max(1, yBottom - yTop + 1);
+    const yCenter = Math.round(yTop + centerFrac * bandH);
+
+    const clipLow = bottomHalfOnly ? Math.round(yTop + 0.5 * bandH) : Math.max(0, yCenter - rCount);
+    const clipHigh = bottomHalfOnly ? yBottom : Math.min(bin.rows - 1, yCenter + rCount);
+
+    const counts = [];
+    for (const x0 of colCenters) {
+      let count = 0;
+      const xLow = Math.max(0, Math.floor(x0 - rCount));
+      const xHigh = Math.min(bin.cols - 1, Math.ceil(x0 + rCount));
+      for (let yy = clipLow; yy <= clipHigh; yy++) {
+        const dy = yy - yCenter;
+        const ptr = bin.ucharPtr(yy);
+        for (let xx = xLow; xx <= xHigh; xx++) {
+          const dx = xx - x0;
+          if (dx*dx + dy*dy <= rCount*rCount) {
+            if (ptr[xx] > 0) count++;
+          }
+        }
+      }
+      counts.push(count);
+    }
+
+    const area = Math.PI * rCount * rCount * (bottomHalfOnly ? 0.6 : 1.0);
+    const minInkSoft = Math.max(5, Math.round(area * 0.20 * thrMul));
+    const minInkHard = Math.max(minInkSoft + Math.round(area * 0.08), Math.round(area * 0.28 * thrMul));
+    const countsSorted = [...counts].sort((a,b)=>a-b);
+    const median = countsSorted[Math.floor(countsSorted.length/2)];
+    const noiseMargin = Math.round(area * (bottomHalfOnly ? 0.12 : 0.10) * thrMul);
+
+    const best = Math.max(...counts);
+    const bestIdx = counts.indexOf(best);
+
+    if (best < minInkHard || best < (median + noiseMargin)) {
+      rowsOut.push("");
+      continue;
+    }
+
+    const nearBestRatio = 0.85 / Math.max(1.0, Math.pow(thrMul, 0.6));
+    let picksIdxs = [];
+    for (let i = 0; i < counts.length; i++) {
+      const v = counts[i];
+      if (v >= Math.max(minInkSoft, median + noiseMargin) && v >= best * nearBestRatio) {
+        picksIdxs.push(i);
+      }
+    }
+
+    const strongRatio = 0.95;
+    const strongIdxs = picksIdxs.filter(i => counts[i] >= Math.max(minInkHard, Math.round(best * strongRatio)));
+
+    let finalIdxs;
+    if (strongIdxs.length >= 2) {
+      finalIdxs = strongIdxs;
+    } else if (picksIdxs.length >= 1) {
+      finalIdxs = [bestIdx];
+    } else {
+      finalIdxs = [];
+    }
+    rowsOut.push(finalIdxs.length ? finalIdxs.map(i => ABCD[i]).join("+") : "");
+  }
+  return rowsOut;
+}
+
+/* ===== Index (single best per row) ===== */
+function decideByInk(bin, rowCenters, colCenters, rIn, thrMul = 1.0) {
+  const picks = [];
+  const area = Math.PI * rIn * rIn;
+  const minInk = Math.max(6, Math.round(area * 0.24 * thrMul));
+  const ratioThr = 1.35 * Math.max(1.0, thrMul);
+
+  for (const y0 of rowCenters) {
+    const counts = [];
+    for (const x0 of colCenters) {
+      let count = 0;
+      const xLow = Math.max(0, Math.floor(x0 - rIn));
+      const xHigh = Math.min(bin.cols - 1, Math.ceil(x0 + rIn));
+      const yLow = Math.max(0, Math.floor(y0 - rIn));
+      const yHigh = Math.min(bin.rows - 1, Math.ceil(y0 + rIn));
+      for (let yy = yLow; yy <= yHigh; yy++) {
+        const dy = yy - y0;
+        const ptr = bin.ucharPtr(yy);
+        for (let xx = xLow; xx <= xHigh; xx++) {
+          const dx = xx - x0;
+          if (dx*dx + dy*dy <= rIn*rIn) {
+            if (ptr[xx] > 0) count++;
+          }
+        }
+      }
+      counts.push(count);
+    }
+
+    let bestIdx = 0, best = counts[0], second = -1;
+    for (let i = 1; i < counts.length; i++) {
+      const v = counts[i];
+      if (v > best) { second = best; best = v; bestIdx = i; }
+      else if (v > second) { second = v; }
+    }
+    const passAbs = best >= minInk;
+    const passRatio = second > 0 ? (best / Math.max(second, 1)) >= ratioThr : true;
+    picks.push((passAbs && passRatio) ? bestIdx : -1);
+  }
+  return picks;
+}
+
+/* ===== Overlays (ghost+grid) ===== */
+function overlayGhost(previewCanvas, warped, packs, invH, srcW, srcH){
+  // Guard for hidden/removed dbg checkbox and for missing canvas
+  if (!(document.getElementById("dbg")?.checked)) return;
+  if (!previewCanvas || !previewCanvas.getContext) return;
+
+  const ctx = previewCanvas.getContext("2d");
+  const ghostOn = true, outlinesOn = true, gridOn = true;
+
+  if (ghostOn) {
+    ctx.save();
+    ctx.globalAlpha=0.27;
+    const ghost=document.createElement("canvas");
+    ghost.width=FID_W; ghost.height=FID_H;
+    cv.imshow(ghost, warped);
+    const gw=Math.min(previewCanvas.width*0.36, 420), gh=gw*(FID_H/FID_W);
+    ctx.drawImage(ghost, previewCanvas.width-gw-8, 8, gw, gh);
+    ctx.restore();
+
+    const ox=previewCanvas.width-gw-8, oy=8, sx=gw/FID_W, sy=gh/FID_H;
+
+    ctx.save();
+    packs.forEach(pk=>{
+      const pts=pk.corners;
+
+      if (outlinesOn) {
+        ctx.strokeStyle="rgba(0,255,255,.9)";
+        ctx.globalAlpha=.9;
+        ctx.lineWidth=1.0;
+        ctx.beginPath();
+        ctx.moveTo(ox+pts[0].x*sx, oy+pts[0].y*sy);
+        for(let i=1;i<4;i++) ctx.lineTo(ox+pts[i].x*sx, oy+pts[i].y*sy);
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      if (gridOn && pk.rowFracs && pk.rowFracs.length){
+        ctx.strokeStyle="rgba(0,255,255,.45)";
+        ctx.globalAlpha=.9;
+        ctx.lineWidth=0.8;
+        for(const fRaw of pk.rowFracs){
+          const f = Math.max(0, Math.min(1, fRaw));
+          const lx = pts[0].x + f*(pts[3].x - pts[0].x);
+          const ly = pts[0].y + f*(pts[3].y - pts[0].y);
+          const rx = pts[1].x + f*(pts[2].x - pts[1].x);
+          const ry = pts[1].y + f*(pts[2].y - pts[1].y);
+          ctx.beginPath();
+          ctx.moveTo(ox+lx*sx, oy+ly*sy);
+          ctx.lineTo(ox+rx*sx, oy+ry*sy);
+          ctx.stroke();
+        }
+      }
+
+      if (gridOn && pk.colFracs && pk.colFracs.length){
+        ctx.strokeStyle="rgba(0,255,255,.45)";
+        ctx.globalAlpha=.9;
+        ctx.lineWidth=0.8;
+        for(const gRaw of pk.colFracs){
+          const g = Math.max(0, Math.min(1, gRaw));
+          const tx = pts[0].x + g*(pts[1].x - pts[0].x);
+          const ty = pts[0].y + g*(pts[1].y - pts[0].y);
+          const bx = pts[3].x + g*(pts[2].x - pts[3].x);
+          const by = pts[3].y + g*(pts[2].y - pts[3].y);
+          ctx.beginPath();
+          ctx.moveTo(ox+tx*sx, oy+ty*sy);
+          ctx.lineTo(ox+bx*sx, oy+by*sy);
+          ctx.stroke();
+        }
+      }
+    });
+    ctx.restore();
+  }
+
+  if(invH){
+    const sX = previewCanvas.width / srcW;
+    const sY = previewCanvas.height / srcH;
+
+    const drawTransformedLine = (x0,y0,x1,y1) => {
+      const srcPts = cv.matFromArray(2,1,cv.CV_32FC2, new Float32Array([x0,y0, x1,y1]));
+      const dstPts = new cv.Mat();
+      cv.perspectiveTransform(srcPts, dstPts, invH);
+      const d = dstPts.data32F;
+      ctx.beginPath();
+      ctx.moveTo(d[0]*sX, d[1]*sY);
+      ctx.lineTo(d[2]*sX, d[3]*sY);
+      ctx.stroke();
+      srcPts.delete(); dstPts.delete();
+    };
+
+    ctx.save();
+    ctx.strokeStyle="rgba(0,255,255,.9)";
+    ctx.globalAlpha=.9;
+    ctx.lineWidth=1.2;
+    packs.forEach(pk=>{
+      const pts=pk.corners;
+      for(let i=0;i<4;i++){
+        const j=(i+1)%4;
+        drawTransformedLine(pts[i].x, pts[i].y, pts[j].x, pts[j].y);
+      }
+    });
+    ctx.restore();
+  }
+}
+let directoryProcessing=false, directoryUploading=false;
+async function processPDF(){
+  if(directoryProcessing)return;
+  if(directoryUploading){setStatus("Wait for the student CSV to finish saving.");return;}
+  if(!studentMap.size){setStatus("Upload your student CSV before processing answer sheets.");setStudentDirectoryVisible(true);document.getElementById("studentDirectory").scrollIntoView({behavior:"smooth"});document.getElementById("studentListFile").focus();return;}
+  directoryProcessing=true;document.getElementById("studentListFile").disabled=true;
+  try{await processPDFWithDirectory();}
+  finally{directoryProcessing=false;document.getElementById("studentListFile").disabled=false;}
+}
+async function processPDFWithDirectory(){
+  // ... existing code ...
+  if(!PDF){ setStatus("Load a PDF first"); return; }
+  if(!cvReady){ setStatus("Loading OpenCV…"); return; }
+
+  $("#btnProcess").disabled=true; $("#btnCSV").disabled=true;
+
+  const pendingDocs = docs.filter(doc => !doc.processed);
+  if (!pendingDocs.length) {
+    setStatus("No new PDFs to process.");
+    $("#btnProcess").disabled=false;
+    $("#btnCSV").disabled = results.length === 0;
+    return;
+  }
+
+  const newResults = [];
+  outEl.textContent="";
+
+  const thrMul = Math.max(0.2, Math.min(3.0, parseFloat(document.getElementById("thrMul")?.value || "1.0")));
+  const mcqCount = Math.max(1, Math.min(45, parseInt(document.getElementById("mcqCount")?.value || "30", 10)));
+  const answerKey = getAnswerKey();
+
+  for (let docIndex = 0; docIndex < pendingDocs.length; docIndex++) {
+    const docEntry = pendingDocs[docIndex];
+    docEntry.attempted = true;
+    const docResults = [];
+    let documentSucceeded = true;
+
+    for(let p=1;p<=docEntry.numPages;p++){
+      setStatus(`Processing PDF ${docIndex + 1}/${pendingDocs.length}, page ${p}/${docEntry.numPages}…`);
+
+      try {
+
+        // Render the original page canvas and cache under global index
+        const pageCanvas = await renderDocPageCanvas(docEntry.pdf, p);
+        const globalIndex = docEntry.baseOffset + p;
+        pageCanvases[globalIndex] = pageCanvas;
+
+    // Continue with processing pipeline
+    let src=canvasToMat(pageCanvas);
+    const { warped, invH, srcW, srcH } = edgeFitWarp(src);
+    const scoreBox = buildScoreBox(invH, srcW, srcH);
+    const indexLocations = buildIndexLocations(invH, srcW, srcH);
+    src.delete();
+
+    const overlayPacks=[];
+    // INSERT: build indexChars and answers for this page
+    // ---------- INDEX ----------
+    const idxImg = warpRegion(warped, TEMPLATE.index.corners, TEMPLATE.outIndexW, TEMPLATE.outIndexH);
+    const idxCrop = cropInside(idxImg);
+    const idxBin  = binarize(idxCrop);
+
+    const rInIdx  = Math.max(2, Math.round((idxCrop.rows/(TEMPLATE.index.rows*2))*TEMPLATE.index.innerR));
+    // Index centres (uniform grid within cropped region)
+    const cIdx = TEMPLATE.crop;
+    const idxRowCentersPx = Array.from({length: TEMPLATE.index.rows}, (_, i) =>
+      Math.round((cIdx.top + ((i + 0.5) / TEMPLATE.index.rows) * (1 - cIdx.top - cIdx.bottom)) * idxCrop.rows)
+    );
+    const idxColCentersPx = Array.from({length: TEMPLATE.index.cols}, (_, i) =>
+      Math.round((cIdx.left + ((i + 0.5) / TEMPLATE.index.cols) * (1 - cIdx.left - cIdx.right)) * idxCrop.cols)
+    );
+
+    const picksIdx = decideByInk(idxBin, idxRowCentersPx, idxColCentersPx, rInIdx, thrMul);
+    const indexChars = picksIdx.map(i => i<0 ? "" : DIGITS16[i]);
+
+    // Overlay pack (index grid)
+    {
+      const c = TEMPLATE.crop;
+      const idxRowFracs = Array.from({length: TEMPLATE.index.rows - 1}, (_,i)=>
+        c.top + ((i+1)/TEMPLATE.index.rows) * (1 - c.top - c.bottom)
+      );
+      const idxColFracs = Array.from({length: TEMPLATE.index.cols - 1}, (_,i)=>
+        c.left + ((i+1)/TEMPLATE.index.cols) * (1 - c.left - c.right)
+      );
+      overlayPacks.push({
+        corners: fracPtsToPx(TEMPLATE.index.corners),
+        rowFracs: idxRowFracs,
+        colFracs: idxColFracs
+      });
+    }
+
+    idxImg.delete(); idxCrop.delete(); idxBin.delete();
+
+    // ---------- MCQs ----------
+    const answers=[];
+    const answerLocations=[];
+    let remaining = mcqCount;
+    for(const block of TEMPLATE.mcq){
+      if (remaining <= 0) break;
+
+      const roi  = warpRegion(warped, block.corners, TEMPLATE.outMCQW, TEMPLATE.outMCQH);
+      const crop = cropInside(roi);
+      const bin0 = binarize(crop);
+      const bin  = refineBinary(bin0);
+
+      const c = TEMPLATE.crop;
+      const mcqColCentersPx = Array.from({length: block.cols}, (_, i) =>
+        Math.round((c.left + ((i + 0.5) / block.cols) * (1 - c.left - c.right)) * crop.cols)
+      );
+
+      const allBands = computeRowBands(block.rows, crop.rows);
+      const rowsNeeded = Math.min(block.rows, remaining);
+      const rowBands = allBands.slice(0, rowsNeeded);
+
+      const rIn     = Math.max(2, Math.round((crop.rows/(block.rows*2))*block.innerR));
+      const rCount  = Math.max(2, Math.round(rIn * 0.95));
+
+      const rowStrings = decideMCQMultiInkBottom(
+        bin,
+        rowBands,
+        mcqColCentersPx,
+        rCount,
+        thrMul,
+        TEMPLATE.mcqBubbleCenterFrac,
+        TEMPLATE.mcqBottomHalfOnly
+      );
+      answers.push(...rowStrings);
+      answerLocations.push(...buildAnswerLocations(block, rowBands, mcqColCentersPx, rIn, crop.cols, invH, srcW, srcH));
+      remaining -= rowStrings.length;
+
+      // Overlay pack
+      {
+        const rowFracs = Array.from({length: block.rows - 1}, (_,i)=> (i+1)/block.rows);
+        const colFracs = Array.from({length: block.cols - 1}, (_,i)=> (i+1)/block.cols);
+        overlayPacks.push({
+          corners: fracPtsToPx(block.corners),
+          rowFracs, colFracs
+        });
+      }
+
+      roi.delete(); crop.delete(); bin0.delete(); bin.delete();
+    }
+    // END INSERT
+
+    while (answers.length < mcqCount) answers.push("");
+    const finalAnswers=answers.slice(0, mcqCount);
+
+    const base = (docEntry.fileName||"pages").replace(/\.[^.]+$/,"");
+    const indexOut = indexChars.slice(0, TEMPLATE.index.rows);
+    const line=[`${base}_p${String(p).padStart(2,"0")}`, ...indexOut, ...finalAnswers].join(";");
+    docResults.push(line);
+
+    const indexStrFull = indexChars.join("");
+    const idFromSheet = indexStrFull.length >= 5 ? indexStrFull.slice(1, 5) : indexStrFull;
+
+    // ===== Build issues for this page =====
+    (function buildIssuesForPage(){
+      // Compute pageTag first to avoid TDZ (temporal dead zone) errors
+      const pageTag = `${base}_p${String(p).padStart(2,"0")}`;
+      const messages = [];
+
+      // Missing and multiple answers
+      const missingQs = [];
+      const multipleQs = []; // store as 'Qn(picks)'
+      for (let i = 0; i < mcqCount; i++) {
+        const ans = (finalAnswers[i] || "").trim();
+        if (!ans) missingQs.push(i + 1);
+        else if (ans.includes("+")) multipleQs.push(`Q${i + 1}(${ans})`);
+      }
+      if (missingQs.length) {
+        messages.push(`Missing answers: ${missingQs.map(q => `Q${q}`).join(", ")}`);
+      }
+      if (multipleQs.length) {
+        messages.push(`Multiple answers: ${multipleQs.join(", ")}`);
+      }
+
+      // Resolve student ID: prefer override keyed by pageTag
+      const override = idOverrides.get(pageTag);
+      const studentIdCandidate = (override && override.length > 0)
+        ? override.trim().toUpperCase()
+        : (idFromSheet || "").toUpperCase();
+
+      if (!studentIdCandidate) {
+        messages.push("Student ID not found (empty index)");
+      } else {
+        if (!studentMap.has(studentIdCandidate)) {
+          messages.push(`Student ID not found in list: ${studentIdCandidate}`);
+        }
+        if (seenStudentIds.has(studentIdCandidate)) {
+          messages.push(`Duplicated student ID: ${studentIdCandidate}`);
+        } else {
+          seenStudentIds.add(studentIdCandidate);
+        }
+      }
+
+      // Append issues line for this page if any
+      if (messages.length) {
+        issues.push(`${pageTag}: ${messages.join("; ")}`);
+      }
+    })();
+    // ===== End issues for this page =====
+
+    let denom = 0, marks = 0;
+    const symbols = [];
+    for (let i = 0; i < mcqCount; i++) {
+      const key = answerKey[i] || "";
+      const ans = finalAnswers[i] || "";
+      if (key && key !== "X") {
+        denom++;
+        if (ans === key) {
+          marks++;
+          symbols.push("✓");
+        } else {
+          symbols.push("✗");
+        }
+      } else {
+        symbols.push(key === "X" ? "X" : "-");
+      }
+    }
+    const pct = denom > 0 ? ((marks / denom) * 100).toFixed(1) : "N/A";
+    const pageTag = `${base}_p${String(p).padStart(2,"0")}`;
+
+    processingFailures.delete(`${docEntry.fileName}, page ${p}`);
+    // Save summary keyed by global page index
+    pageSummaries[globalIndex] = { pageTag, idFromSheet, marks, denom, pct, symbols, finalAnswers, answerLocations, scoreBox, indexLocations, originalIndex: idFromSheet, correctedIndex: idOverrides.get(pageTag) || "" };
+
+    // Optional: overlay preview for the page if it’s the current global page
+    if (globalIndex === currentPage) {
+      const previewEl = document.getElementById("preview");
+      if (previewEl) overlayGhost(previewEl, warped, overlayPacks, invH, srcW, srcH);
+    }
+
+        if(invH) invH.delete();
+        warped.delete();
+      } catch (error) {
+        documentSucceeded = false;
+        console.error(`Failed to process ${docEntry.fileName}, page ${p}:`, error);
+        processingFailures.set(`${docEntry.fileName}, page ${p}`, "Processing failed");
+        break;
+      }
+    }
+
+    if (documentSucceeded) {
+      docEntry.processed = true;
+      newResults.push(...docResults);
+    }
+  }
+
+  // Merge and persist
+  results = results.concat(newResults);
+  outEl.textContent=results.join("\n");
+  saveStoredResults();
+
+  // Refresh the checklist after processed rows have been merged.
+  recomputeIssues();
+
+  renderSummaryForPage(currentPage);
+  renderCurrentReportPreview(currentPage);
+
+  await renderPreview();
+  $("#btnCSV").disabled = results.length===0;
+  $("#btnProcess").disabled=false;
+  const failedCount = pendingDocs.filter(doc => !doc.processed).length;
+  setStatus(failedCount
+    ? `Parsed ${newResults.length} page(s); ${failedCount} PDF${failedCount === 1 ? "" : "s"} failed.`
+    : `Done. Parsed ${newResults.length} page(s) from ${pendingDocs.length} PDF${pendingDocs.length === 1 ? "" : "s"}.`
+  );
+}
+
+/* ===== CSV ===== */
+function downloadCSV(){
+  // ... existing code ...
+  if(!results.length) return;
+  const indexCols = TEMPLATE.index.rows || 4;
+  const exportLines = results.map(line => {
+    const cells = line.split(";");
+    const pageTag = cells[0];
+
+    // Apply override to the 4 index characters (if any)
+    const override = idOverrides.get(pageTag);
+    if (override && override.length > 0) {
+      const chars = override.toUpperCase().split("");
+      for (let i = 0; i < indexCols; i++) {
+        cells[1 + i] = chars[i] || "";
+      }
+    }
+
+    // Keep the full student index as text, including its class and leading zeros.
+    const idxChars = [];
+    for (let i = 0; i < Math.min(indexCols, 4); i++) {
+      idxChars.push(cells[1 + i] || "");
+    }
+    const idxCode = idxChars.join("").toUpperCase();
+    const cls = idxCode.slice(0, 2) || "";
+    const idx = idxCode;
+
+    // Lookup student name using the 4-char code (after override application)
+    const stuName = (studentMap.get(idxCode)?.name) || "";
+
+    // Lookup score: number of correct answers (marks) from pageSummaries via pageTag
+    let score = "";
+    const meta = pageSummaries.find(m => m && m.pageTag === pageTag);
+    if (meta && typeof meta.marks === "number") {
+      score = String(meta.marks);
+    }
+
+    // Insert derived columns immediately after pageTag: class, index, name, score
+    cells.splice(1, 0, cls, idx, stuName, score);
+
+    return cells.join(";");
+  });
+
+  const blob=new Blob([exportLines.join("\n")],{type:"text/csv;charset=utf-8"});
+  const base = (loadedFileName||"pages").replace(/\.[^.]+$/,"");
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}_${String(d.getHours()).padStart(2,"0")}${String(d.getMinutes()).padStart(2,"0")}${String(d.getSeconds()).padStart(2,"0")}`;
+  const filename = `oms_${base}_${stamp}.csv`;
+
+  // Revoke previous URL if any
+  if (lastCSVUrl) {
+    try { URL.revokeObjectURL(lastCSVUrl); } catch {}
+    lastCSVUrl = null;
+  }
+
+  const url=URL.createObjectURL(blob);
+  lastCSVUrl = url;
+
+  // Visible download link
+  const sizeKB = Math.max(1, Math.round(blob.size / 1024));
+  const dlRow = document.getElementById("dlRow");
+  if (dlRow) {
+    dlRow.innerHTML = "";
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.textContent = `Download ${filename} (${sizeKB} KB)`;
+    a.style.color = "#22d3ee";
+    a.style.textDecoration = "none";
+    a.className = "pill";
+    dlRow.appendChild(a);
+
+    a.click();
+
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch {}
+      if (lastCSVUrl === url) lastCSVUrl = null;
+    }, 120000);
+  } else {
+    const a=document.createElement("a"); a.href=url; a.download=filename; a.click();
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 30000);
+  }
+}
+
+/* ===== Answer key helpers ===== */
+function parsePastedAnswers(text, n) {
+  const t = (text || "").trim().toUpperCase();
+  const tokens = t.split(/[^A-DX]+/).filter(Boolean);
+  const out = new Array(n).fill("");
+
+  if (tokens.length === 1) {
+    for (let i = 0; i < n; i++) {
+      const c = tokens[0][i];
+      out[i] = ["A","B","C","D","X"].includes(c) ? c : "";
+    }
+  } else {
+    for (let i = 0; i < n; i++) {
+      const c = tokens[i] || "";
+      out[i] = ["A","B","C","D","X"].includes(c) ? c : "";
+    }
+  }
+  return out;
+}
+function saveAnswerKey() {
+  const n = Math.max(1, Math.min(45, parseInt(document.getElementById("mcqCount")?.value || "30", 10)));
+  const taVal = document.getElementById("ansPaste")?.value || "";
+  const arr = parsePastedAnswers(taVal, n);
+  const count = arr.filter(Boolean).length;
+  const status = document.getElementById("keyStatus");
+  if (!count) {
+    if (status) status.textContent = "Not saved — enter answers using A, B, C or D, or X to void a question.";
+    return;
+  }
+  savedAnswerKey = arr;
+  updateTutorial();
+  syncIntegratedReview(false);
+  try { localStorage.setItem(LS_ANSWER_KEY, JSON.stringify(arr)); } catch (e) { console.warn("Failed to save answer key:", e); }
+  if (status) status.textContent = count === n
+    ? `Saved ${count}/${n}`
+    : `Saved ${count}/${n} — ${n - count} answers missing`;
+}
+async function clearAnswerKey() {
+  if (!await confirmAction("Clear answer key?", "This deletes the saved answer key and clears the answer field. Existing results will remain but will no longer be graded until you save another key.", "Clear answer key")) return;
+  savedAnswerKey = null;
+  syncIntegratedReview(false);
+  try { localStorage.removeItem(LS_ANSWER_KEY); } catch {}
+  const ta = document.getElementById("ansPaste");
+  if (ta) ta.value = "";
+  const status = document.getElementById("keyStatus");
+  if (status) status.textContent = "Not saved";
+  updateTutorial();
+}
+function getAnswerKey() {
+  const n = Math.max(1, Math.min(45, parseInt(document.getElementById("mcqCount")?.value || "30", 10)));
+  if (Array.isArray(savedAnswerKey)) {
+    const normalized = savedAnswerKey.slice(0, n);
+    if (normalized.length < n) {
+      normalized.push(...new Array(n - normalized.length).fill(""));
+    }
+    return normalized;
+  }
+  const taVal = document.getElementById("ansPaste")?.value || "";
+  return parsePastedAnswers(taVal, n);
+}
+
+/* ===== Student list (CSV) ===== */
+function parseCSV(text) {
+  const rows = [];
+  let i = 0, field = "", row = [], inQuotes = false;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        row.push(field); field = "";
+      } else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); field = "";
+        rows.push(row); row = [];
+      } else {
+        field += ch;
+      }
+    }
+    i++;
+  }
+  if (inQuotes) throw new Error("The CSV contains an unclosed quoted field. Save it as CSV and upload again.");
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+function findStudentsByName(query) {
+  const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return Array.from(studentMap.values()).filter(student =>
+    words.every(word => student.name.toLocaleLowerCase().includes(word))
+  );
+}
+
+function searchStudentIndex(event) {
+  event?.preventDefault();
+  const query = document.getElementById("studentNameSearch").value;
+  const status = document.getElementById("studentSearchStatus");
+  const results = document.getElementById("studentSearchResults");
+  results.replaceChildren();
+  results.hidden = true;
+  if (!query.trim()) {
+    status.textContent = "Enter a student's name to search.";
+    return;
+  }
+  const matches = findStudentsByName(query);
+  status.textContent = matches.length
+    ? `${matches.length} student${matches.length === 1 ? "" : "s"} found. Click an index to fill ID override.`
+    : "No students found. Try another part of the name.";
+  for (const student of matches) {
+    const item = document.createElement("li");
+    const indexButton = document.createElement("button");
+    indexButton.type = "button";
+    indexButton.textContent = student.id;
+    indexButton.title = `Use ${student.id} for ID override`;
+    indexButton.setAttribute("aria-label", `Use index ${student.id} for ${student.name}`);
+    indexButton.addEventListener("click", () => {
+      const override = document.getElementById("idOverride");
+      override.value = student.id;
+      override.focus();
+      status.textContent = `ID override filled with ${student.id}. Click Apply to save the correction.`;
+    });
+    item.append(document.createTextNode(`${student.name} — Index: `), indexButton,
+      document.createTextNode(` · Class: ${student.cls}`));
+    results.appendChild(item);
+  }
+  results.hidden = matches.length === 0;
+}
+
+function setStudentDirectoryVisible(visible) {
+  document.getElementById("studentDirectory").open = visible;
+}
+function validateStudentRows(rows) {
+  const header=(rows[0]||[]).map(value=>String(value).replace(/^\uFEFF/, "").trim().toUpperCase());
+  if (!["CLASS","STUDENT","ID"].every(name=>header.filter(column=>column===name).length===1)) {
+    throw new Error("The CSV must contain exactly one CLASS, STUDENT, and ID column.");
+  }
+  const map=new Map(),errors=[];
+  for(let i=1;i<rows.length;i++) {
+    const cols=rows[i];
+    if(cols.every(value=>!String(value).trim()))continue;
+    const cls=String(cols[header.indexOf("CLASS")]||"").trim();
+    const name=String(cols[header.indexOf("STUDENT")]||"").trim();
+    let id=String(cols[header.indexOf("ID")]||"").trim().toUpperCase();
+    const scientific=id.match(/^([1-4])\.0+E\+(\d{2})$/);
+    if(scientific&&cls.split("/")[0].toUpperCase()===`${scientific[1]}E`)id=`${scientific[1]}E${scientific[2]}`;
+    if(!cls||!name||!id){errors.push(`Row ${i+1}: CLASS, STUDENT, and ID are required.`);continue;}
+    if(!/^[A-Z0-9]{4}$/.test(id)){errors.push(`Row ${i+1}: ID "${id}" must contain exactly four letters or digits. Keep the ID column as Text in Excel.`);continue;}
+    if(map.has(id)){errors.push(`Row ${i+1}: duplicate ID ${id}. Each student needs a unique ID.`);continue;}
+    map.set(id,{id,name,cls});
+  }
+  if(errors.length)throw new Error(errors.slice(0,5).join(" ")+(errors.length>5?` Plus ${errors.length-5} more errors.`:""));
+  if(!map.size)throw new Error("The CSV has no students. Add your student rows below the header before uploading.");
+  return map;
+}
+function refreshStudentDirectory(message) {
+  const loaded=studentMap.size>0;
+  document.getElementById("studentDirectoryStatus").textContent=message;
+  document.getElementById("btnSearchStudent").disabled=!loaded;
+  document.getElementById("studentNameSearch").disabled=!loaded;
+  document.getElementById("studentSearchStatus").textContent=loaded?"Type a name to see matching students.":"Upload your student CSV above to enable name search and ID checks.";
+  document.getElementById("studentSearchResults").replaceChildren();
+  document.getElementById("studentSearchResults").hidden=true;
+  const body=document.getElementById("studentDirectoryRows");body.replaceChildren();
+  for(const student of studentMap.values()) {
+    const row=document.createElement("tr");
+    for(const value of [student.cls,student.name,student.id]){const cell=document.createElement("td");cell.textContent=value;row.appendChild(cell);}
+    body.appendChild(row);
+  }
+  document.getElementById("studentDirectoryPreview").hidden=!loaded;
+  recomputeIssues();renderSummaryForPage(currentPage);renderCurrentReportPreview(currentPage);updateTutorial();
+}
+function loadStudentList() {
+  studentMap=new Map();
+  try {
+    const raw=localStorage.getItem(LS_STUDENTS_KEY);
+    if(raw){
+      const saved=JSON.parse(raw);
+      if(!Array.isArray(saved))throw new Error("Saved student directory is invalid.");
+      if(saved.length)studentMap=validateStudentRows([["CLASS","STUDENT","ID"],...saved.map(student=>[student.cls,student.name,student.id])]);
+    }
+    setStudentDirectoryVisible(false);
+    refreshStudentDirectory(studentMap.size?`Loaded ${studentMap.size} saved students from this browser.`:"No students loaded. Upload your completed CSV before processing answer sheets.");
+  }catch(error){refreshStudentDirectory("Could not restore your saved directory. Upload your CSV again. "+error.message);}
+}
+async function uploadStudentList(event) {
+  const input=event.target,file=input.files?.[0];if(!file)return;
+  input.disabled=true;directoryUploading=true;
+  try {
+    const next=validateStudentRows(parseCSV(await file.text()));
+    try{localStorage.setItem(LS_STUDENTS_KEY,JSON.stringify([...next.values()]));}
+    catch{throw new Error("The browser could not save the directory. Check browser storage permissions and try again.");}
+    studentMap=next;
+    tutorialConfirmDirectory = false;
+    refreshStudentDirectory(`Saved ${studentMap.size} students from ${file.name}. Ready to process answer sheets.`);
+  }catch(error){document.getElementById("studentDirectoryStatus").textContent=`Upload failed: ${error.message} Your current directory has not been changed.`;}
+  finally{input.value="";input.disabled=false;directoryUploading=false;}
+}
+function downloadStudentTemplate() {
+  const blob=new Blob(["\uFEFFCLASS,STUDENT,ID\r\n"],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+  link.href=url;link.download="student-directory-template.csv";link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+/* ===== Summary & Reports ===== */
+function hasProcessedReportData(){
+  return Array.isArray(pageSummaries) ? pageSummaries.some(Boolean) : false;
+}
+
+function updateReportActionButtons(){
+  const hasData = hasProcessedReportData();
+  ["btnOpenPDF", "btnDownloadAll", "printMarkedCurrent", "printMarkedAll"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.classList.toggle("report-action-ready", hasData);
+    btn.disabled = !hasData;
+  });
+}
+
+function renderSummaryForPage(p){
+  const summaryEl = document.getElementById("summary");
+  const idInput = document.getElementById("idOverride");
+  const resolvedEl = document.getElementById("studentResolved");
+  if (!summaryEl) return;
+
+  const meta = pageSummaries[p];
+  if (!meta) {
+    summaryEl.textContent = "No summary for this page.";
+    if (idInput) idInput.value = "";
+    if (resolvedEl) resolvedEl.textContent = "";
+    updateReportActionButtons();
+    return;
+  }
+
+  const override = (meta && idOverrides.get(meta.pageTag)) || "";
+  if (idInput) idInput.value = override || meta.idFromSheet || "";
+
+  const useId = (override || meta.idFromSheet || "").toUpperCase();
+  const stu = useId ? (studentMap.get(useId) || null) : null;
+  const info = stu ? `${stu.id} ${stu.name} (${stu.cls})`
+                   : (useId ? `${useId} (not found)` : "ID: N/A");
+  if (resolvedEl) resolvedEl.textContent = info;
+
+  const line = meta.denom > 0
+    ? `${meta.pageTag} — ${info}: ${meta.marks}/${meta.denom} (${meta.pct}%)  [${meta.symbols.join("")}]`
+    : `${meta.pageTag} — ${info}: No answer key set`;
+
+  summaryEl.textContent = line;
+  updateReportActionButtons();
+}
+function renderCurrentReportPreview(p) {
+  const reportPreviewEl = document.getElementById("reportPreview");
+  if (!reportPreviewEl) return;
+  reportPreviewEl.innerHTML = buildReportHTMLForPage(p, 'preview');
+}
+function buildReportHTMLForPage(p, mode){
+  const meta = pageSummaries[p];
+  if (!meta) return `<div class="${mode === 'preview' ? 'report-page' : ''}"><div>No data for page ${p}.</div></div>`;
+
+  // FIX: use pageTag-keyed override (previously used idOverrides.get(p))
+  const override = idOverrides.get(meta.pageTag) || "";
+  const useId = (override || meta.idFromSheet || "").toUpperCase();
+  const stu = useId ? (studentMap.get(useId) || null) : null;
+  const answerKey = getAnswerKey();
+
+  const namePart = stu ? `Name: ${escapeReportText(stu.name)}` : "";
+  const classPart = stu ? `Class: ${escapeReportText(stu.cls)}` : "";
+  const idPart = useId ? `ID: ${useId}${stu ? "" : " (not found)"}` : "ID: N/A";
+
+  const totalQ = (meta.finalAnswers && meta.finalAnswers.length) ? meta.finalAnswers.length : 0;
+  const rows = [];
+  for (let i = 0; i < totalQ; i++) {
+    const qn = String(i + 1).padStart(2, "0");
+    const ans = meta.finalAnswers[i] || "";
+    const key = answerKey[i] || "";
+    let result = "-";
+    if (key === "X") result = "Voided";
+    else if (key) result = (ans === key) ? "✓" : "✗";
+    const correct = key ? key : "—";
+    rows.push(
+      `<tr>
+        <td>Q${qn}</td>
+        <td>${ans || "-"}</td>
+        <td class="${result === "✓" ? "ok" : (result === "✗" ? "bad" : "")}">${result}</td>
+        <td>${result === "✗" ? correct : (key ? "" : "—")}</td>
+      </tr>`
+    );
+  }
+
+  const shellClass = (mode === 'preview') ? 'report-page' : 'print-sheet page-break';
+  return `
+    <div class="${shellClass} student-report">
+      ${examTitle.trim() ? `<div style="font-size:18px;font-weight:700;margin-bottom:10px;overflow-wrap:anywhere">${escapeReportText(examTitle.trim())}</div>` : ""}
+      <div class="report-heading"><h2>Student Report</h2><div class="report-score">${meta.denom ? `${meta.marks}/${meta.denom}` : "Not scored"}<small>${meta.denom ? `${meta.pct}% correct` : "No scored questions"}</small></div></div>
+      <div class="sub">${idPart}${namePart ? " • " + namePart : ""}${classPart ? " • " + classPart : ""}</div>
+      <div class="sub">Source: ${meta.pageTag}</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:18%">Question</th>
+            <th style="width:16%">Chosen</th>
+            <th style="width:20%">Result</th>
+            <th style="width:46%">Correct answer (if wrong)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+function buildCurrentReportHTMLDoc(){
+  const p = currentPage;
+  const content = buildReportHTMLForPage(p, 'print');
+  const styles = `
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { background: #fff; color: #000; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+      .print-sheet { background: #fff; color: #000; }
+      .print-sheet .header { font-size: 14px; margin-bottom: 8px; }
+      .print-sheet .sub { color: #444; font-size: 12px; margin-top: 2px; }
+      .print-sheet h2 { margin: 12px 0 8px; font-size: 16px; color: #111; }
+      .print-sheet table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .print-sheet th, .print-sheet td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+      .print-sheet th { background: #f2f2f2; }
+      .ok { color: #16a34a; font-weight: 600; }
+      .bad { color: #dc2626; font-weight: 600; }
+      .page-break { page-break-after: always; }
+      .page-break:last-child { page-break-after:auto; }
+      ${document.getElementById("studentReportStyles").textContent}
+    </style>
+  `;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body>${content}</body></html>`;
+}
+function renderAllReportsPreview(){
+  const preview = document.getElementById("reportPreview");
+  if (!preview) return;
+  const pages = [];
+
+  // Use combined total pages across all uploaded PDFs
+  if (totalPages === 0) {
+    preview.innerHTML = "<div class='small'>No PDF loaded.</div>";
+    return;
+  }
+
+  for (let p = 1; p <= totalPages; p++) {
+    if (pageSummaries[p]) {
+      pages.push(buildReportHTMLForPage(p, 'preview'));
+    }
+  }
+
+  if (pages.length === 0) {
+    preview.innerHTML = "<div class='small'>No processed pages yet.</div>";
+    return;
+  }
+
+  preview.innerHTML = pages.join("\n");
+}
+function buildAllReportsHTMLDoc(){
+  const pages = [];
+
+  // Include all processed pages across all uploaded PDFs
+  const count = totalPages;
+  for (let p = 1; p <= count; p++) {
+    if (pageSummaries[p]) {
+      pages.push(buildReportHTMLForPage(p, 'print'));
+    }
+  }
+  const styles = `
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { background: #fff; color: #000; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+      .print-sheet { background: #fff; color: #000; }
+      .print-sheet .header { font-size: 14px; margin-bottom: 8px; }
+      .print-sheet .sub { color: #444; font-size: 12px; margin-top: 2px; }
+      .print-sheet h2 { margin: 12px 0 8px; font-size: 16px; color: #111; }
+      .print-sheet table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .print-sheet th, .print-sheet td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+      .print-sheet th { background: #f2f2f2; }
+      .ok { color: #16a34a; font-weight: 600; }
+      .bad { color: #dc2626; font-weight: 600; }
+      .page-break { page-break-after: always; }
+      .page-break:last-child { page-break-after:auto; }
+      ${document.getElementById("studentReportStyles").textContent}
+    </style>
+  `;
+  const autoPrint = `
+    <script>
+      window.addEventListener('load', function() {
+        try { window.print(); } catch (e) {}
+      });
+    <\/script>
+  `;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${styles}</head><body>${pages.join("")}${autoPrint}</body></html>`;
+}
+
+function openItemAnalysisPreview() {
+  showIntegratedResults("summary");
+  document.getElementById("resultsSection").scrollIntoView({behavior:"smooth"});
+  document.getElementById("showQuestionSummary").focus({preventScroll:true});
+}
+
+/* ===== Buttons for reports ===== */
+async function printMarkedSheets(all = false) {
+  const pages = all ? Array.from({length:totalPages}, (_,i)=>i+1) : [currentPage];
+  if (!totalPages || pages.some(p=>!pageSummaries[p]?.answerLocations || !pageSummaries[p]?.scoreBox)) {
+    setStatus(all ? "Process all loaded sheets before printing all marked sheets." : "Process the current sheet before printing it with marks.");return;
+  }
+  const key = getAnswerKey().slice();
+  if (!key.some(answer=>answer && answer !== "X")) {setStatus("Save an answer key with at least one non-voided question before printing marked sheets.");return;}
+  const snapshots = pages.map(p=>({page:p,meta:structuredClone(pageSummaries[p]),source:globalIndexToDocPage(p)}));
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {setStatus("Allow pop-ups for this page to print marked sheets.");return;}
+  const doc = printWindow.document;
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Marked answer sheets</title><style>body{margin:0;background:#e5e7eb;font:14px system-ui}header{padding:16px;background:white;position:sticky;top:0}button{padding:8px 14px;margin-right:12px}section{margin:16px auto;background:white}img{display:block;width:100%;height:100%}@media print{body{background:white}header{display:none}section{margin:0;break-after:page;break-inside:avoid}section:last-child{break-after:auto}img{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body><header><button id="print" disabled>Print / Save PDF</button><span id="progress" role="status">Preparing marked sheets…</span></header><main></main></body></html>');doc.close();
+  const progress=doc.getElementById("progress"),button=doc.getElementById("print");
+  button.onclick=()=>printWindow.print();
+  try {
+    for(let i=0;i<snapshots.length;i++) {
+      if(printWindow.closed)return;
+      progress.textContent=`Preparing marked sheet ${i+1} of ${snapshots.length}…`;
+      const {meta,source}=snapshots[i];
+      const page=await source.entry.pdf.getPage(source.pageInDoc),size=page.getViewport({scale:1}),viewport=page.getViewport({scale:2.5});
+      const canvas=document.createElement("canvas");canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+      // Print intent avoids requestAnimationFrame throttling when the preview tab is active.
+      await page.render({canvasContext:canvas.getContext("2d"),viewport,intent:"print"}).promise;
+      drawMarkedSheet(canvas,meta,{quiet:true,key});
+      // Embed each image in the preview so printing never depends on a temporary
+      // object URL that can be released while the browser prepares its preview.
+      const imageData=canvas.toDataURL("image/png");
+      if(imageData === "data:,")throw new Error("Could not prepare a sheet image.");
+      if(printWindow.closed)return;
+      const section=doc.createElement("section"),img=doc.createElement("img"),style=doc.createElement("style");
+      section.style.cssText=`width:${size.width}pt;height:${size.height}pt;page:marked${i}`;
+      style.textContent=`@page marked${i}{size:${size.width}pt ${size.height}pt;margin:0}`;doc.head.appendChild(style);
+      img.alt=`Marked sheet ${i+1}: ${meta.idFromSheet || meta.pageTag}`;img.src=imageData;section.appendChild(img);doc.querySelector("main").appendChild(section);
+      await img.decode();
+      if (!img.naturalWidth) throw new Error("The marked sheet image did not load.");
+      canvas.width=canvas.height=0;
+    }
+    if(printWindow.closed)return;
+    progress.textContent=`${snapshots.length} marked sheet${snapshots.length===1?"":"s"} ready. Click Print / Save PDF. Use Actual size / 100%, with headers and footers off.`;
+    button.disabled=false;printWindow.focus();
+    setStatus("Marked sheet preview is ready in the new tab. Click Print / Save PDF there.");
+  } catch(error) {
+    if(!printWindow.closed){progress.textContent="Could not prepare all marked sheets. Close this tab and try again. "+error.message;button.disabled=true;}
+    console.error("Marked sheet preview failed", error);
+    setStatus("Marked sheet preview failed: " + error.message);
+  }
+}
+document.getElementById("printMarkedCurrent").onclick=()=>printMarkedSheets(false);
+document.getElementById("printMarkedAll").onclick=()=>printMarkedSheets(true);
+
+const btnOpenPDF = document.getElementById("btnOpenPDF");
+if (btnOpenPDF) btnOpenPDF.onclick = () => {
+  if (!hasProcessedReportData()) return;
+  const html = buildCurrentReportHTMLDoc();
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+};
+const btnDownloadAll = document.getElementById("btnDownloadAll");
+if (btnDownloadAll) btnDownloadAll.onclick = () => {
+  if (!hasProcessedReportData()) return;
+  const html = buildAllReportsHTMLDoc();
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+};
+updateReportActionButtons();
+
+// The guide follows actual app state, so failed saves/uploads never advance it.
+var tutorialEnabled = false;
+var tutorialTargets = [];
+var tutorialConfirmDirectory = false;
+var tutorialConfirmTitle = false;
+var tutorialInitialTitle = true;
+var tutorialExportStep = 0;
+var tutorialExportStage = null;
+function updateTutorial() {
+  const message = document.getElementById("tutorialMessage");
+  if (!message) return;
+  document.querySelectorAll(".tutorial-focus").forEach(el => el.classList.remove("tutorial-focus"));
+  const n = Math.max(1, Math.min(45, parseInt(document.getElementById("mcqCount").value || "30", 10)));
+  const draft = parsePastedAnswers(document.getElementById("ansPaste").value, n);
+  const saved = savedAnswerKey && JSON.stringify(savedAnswerKey) === JSON.stringify(draft);
+  const active = [...issueHistory.values()].filter(issue => !issue.resolved && !["blank", "multi"].includes(issue.type));
+  const ids = active.filter(issue => issue.type === "id");
+  const duplicates = active.filter(issue => issue.type === "duplicate");
+  let text;
+  tutorialExportStage = null;
+  if (tutorialConfirmDirectory || !studentMap.size) {
+    text = studentMap.size
+      ? `Step 1 of 10 · ${studentMap.size} saved students are available. Upload an updated student CSV, or click Use saved student directory to continue.`
+      : "Step 1 of 10 · Download the student CSV template, fill in CLASS, STUDENT, and ID, then upload your completed CSV. A successful upload saves it in this browser and advances the guide.";
+    tutorialTargets = ["studentListFile", "downloadStudentTemplate"];
+  } else if (tutorialConfirmTitle || !document.getElementById("examTitle").value.trim()) {
+    text = "Step 2 of 10 · Enter or check the exam paper title, then click Continue. The title saves automatically.";
+    tutorialTargets = ["examTitle"];
+  } else if (!draft.every(Boolean)) {
+    text = `Step 3 of 10 · Set the number of questions and enter one answer (A–D) for each. ${draft.filter(Boolean).length}/${n} answers entered.`;
+    tutorialTargets = ["ansPaste", "mcqCount"];
+  } else if (!saved) {
+    text = "Step 4 of 10 · Click Save answer key to confirm your answers.";
+    tutorialTargets = ["btnSaveKey"];
+  } else if (docs.some(doc => !doc.processed && !doc.attempted) || (docs.some(doc => !doc.processed) && !active.length)) {
+    text = "Step 6 of 10 · Click Process PDFs. Wait for processing to finish, then review any issues below.";
+    tutorialTargets = ["btnProcess"];
+  } else if (results.length || active.length) {
+    text = ids.length
+      ? `Step 7 of 10 · Resolve ${ids.length} missing / unknown ID issue(s) first. Select a highlighted issue, check the sheet, then enter the correct student ID and click Apply. Use Find student to look up an ID.`
+      : duplicates.length ? `Step 7 of 10 · Resolve ${duplicates.length} duplicate ID issue(s). Select a highlighted issue, check the sheet, and apply the correct unique student ID.`
+      : active.length ? "Step 7 of 10 · IDs checked. Retry PDFs with processing failures. Missing and multiple answers do not need correction for this guide."
+      : "";
+    tutorialTargets = active.length ? ["issues"] : [];
+    if (!active.length) {
+      tutorialExportStage = tutorialExportStep;
+      if (tutorialExportStep === 0) {
+        text = "Step 8 of 10 · Print student results. Click Print all reports, then print or save them as PDF. Return here and confirm when finished. Missing and multiple answers are ignored by the guide.";
+        tutorialTargets = ["btnDownloadAll"];
+      } else if (tutorialExportStep === 1) {
+        text = "Step 9 of 10 · Download item analysis. Click Save item analysis PDF, choose Save as PDF in the print dialog, and save the file. Then confirm below.";
+        tutorialTargets = ["downloadItemAnalysis"];
+      } else if (tutorialExportStep === 2) {
+        text = "Step 10 of 10 · Click Download student entries CSV to export graded student entries. Confirm once the CSV has downloaded.";
+        tutorialTargets = ["downloadStudentEntries"];
+      } else {
+        text = "Guided setup complete · You confirmed that student results are printed or saved, item analysis is saved, and the student entries CSV is downloaded.";
+      }
+    }
+  } else {
+    text = "Step 5 of 10 · Drop scanned PDF files into the highlighted area, or choose PDF files.";
+    tutorialTargets = ["drop"];
+  }
+  document.getElementById("tutorialConfirmDirectory").hidden = tutorialTargets[0] !== "studentListFile" || !studentMap.size;
+  const confirmExport = document.getElementById("tutorialConfirmExport");
+  confirmExport.hidden = tutorialExportStage === null || tutorialExportStage > 2;
+  confirmExport.textContent = ["I’ve printed / saved the reports", "I’ve saved item analysis", "I’ve downloaded the CSV"][tutorialExportStage] || "";
+  document.getElementById("tutorialLocate").hidden = !tutorialTargets.length;
+  const confirmTitle = document.getElementById("tutorialConfirmTitle");
+  confirmTitle.hidden = tutorialTargets[0] !== "examTitle";
+  confirmTitle.disabled = !document.getElementById("examTitle").value.trim();
+  if (message.textContent !== text) message.textContent = text;
+  if (tutorialEnabled) tutorialTargets.forEach(id => document.getElementById(id)?.classList.add("tutorial-focus"));
+  else if (tutorialInitialTitle) document.getElementById("examTitle").classList.add("tutorial-focus");
+}
+function initCTASequence() {
+  document.getElementById("examTitle").addEventListener("input", () => { tutorialInitialTitle = false; });
+  ["examTitle", "ansPaste", "mcqCount"].forEach(id => document.getElementById(id).addEventListener("input", updateTutorial));
+  const guide = document.getElementById("tutorialGuide");
+  const launcher = document.getElementById("openTutorial");
+  const handle = document.getElementById("tutorialHandle");
+  const positionGuide = (left, top) => {
+    const bounds = guide.getBoundingClientRect();
+    guide.style.left = `${Math.max(12, Math.min(left, window.innerWidth - bounds.width - 12))}px`;
+    guide.style.top = `${Math.max(12, Math.min(top, window.innerHeight - bounds.height - 12))}px`;
+    guide.style.right = "auto";
+    guide.style.bottom = "auto";
+  };
+  const setGuideOpen = open => {
+    tutorialInitialTitle = false;
+    tutorialEnabled = open;
+    tutorialConfirmTitle = open;
+    tutorialConfirmDirectory = open;
+    if (open) tutorialExportStep = 0;
+    guide.hidden = !open;
+    launcher.setAttribute("aria-expanded", String(open));
+    updateTutorial();
+    if (open) {
+      const bounds = guide.getBoundingClientRect();
+      positionGuide(bounds.left, bounds.top);
+      document.getElementById("tutorialLocate").click();
+    } else launcher.focus({preventScroll:true});
+  };
+  document.getElementById("tutorialConfirmDirectory").onclick = () => {
+    if (!studentMap.size) return;
+    tutorialConfirmDirectory = false;
+    updateTutorial();
+    document.getElementById("tutorialLocate").click();
+  };
+  document.getElementById("tutorialConfirmTitle").onclick = () => {
+    if (!document.getElementById("examTitle").value.trim()) return;
+    tutorialConfirmTitle = false;
+    updateTutorial();
+    document.getElementById("tutorialLocate").focus({preventScroll:true});
+  };
+  document.getElementById("tutorialConfirmExport").onclick = () => {
+    if (tutorialExportStage === null || tutorialExportStage > 2) return;
+    tutorialExportStep++;
+    updateTutorial();
+    if (tutorialTargets.length) document.getElementById("tutorialLocate").click();
+    else document.getElementById("tutorialClose").focus({preventScroll:true});
+  };
+  launcher.onclick = () => setGuideOpen(!tutorialEnabled);
+  document.getElementById("tutorialClose").onclick = () => setGuideOpen(false);
+  guide.addEventListener("keydown", event => {
+    if (event.key === "Escape") { event.preventDefault(); setGuideOpen(false); }
+  });
+  let drag = null;
+  handle.addEventListener("pointerdown", event => {
+    if (event.button !== 0) return;
+    const bounds = guide.getBoundingClientRect();
+    drag = {id:event.pointerId, x:event.clientX - bounds.left, y:event.clientY - bounds.top};
+    handle.setPointerCapture(event.pointerId);
+  });
+  handle.addEventListener("pointermove", event => {
+    if (drag && drag.id === event.pointerId) positionGuide(event.clientX - drag.x, event.clientY - drag.y);
+  });
+  const endDrag = () => { drag = null; };
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+  handle.addEventListener("lostpointercapture", endDrag);
+  handle.addEventListener("keydown", event => {
+    const directions = {ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1]};
+    const direction = directions[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const bounds = guide.getBoundingClientRect(), distance = event.shiftKey ? 40 : 10;
+    positionGuide(bounds.left + direction[0]*distance, bounds.top + direction[1]*distance);
+  });
+  const keepGuideVisible = () => {
+    if (guide.hidden) return;
+    const bounds = guide.getBoundingClientRect();
+    positionGuide(bounds.left, bounds.top);
+  };
+  window.addEventListener("resize", keepGuideVisible);
+  new ResizeObserver(keepGuideVisible).observe(guide);
+  document.getElementById("tutorialLocate").onclick = () => {
+    const target = document.getElementById(tutorialTargets[0]);
+    if (!target) return;
+    if (target.closest("#studentDirectory")) setStudentDirectoryVisible(true);
+    target.scrollIntoView({behavior:"smooth", block:"center"});
+    if (target.id === "issues") {
+      ["id", "duplicate", "processing"].forEach(type => {
+        document.querySelector(`#issueFilters input[value="${type}"]`).checked = true;
+      });
+      renderIssueChecklist();
+      target.querySelector('li.priority-id, li[role="button"]')?.focus({preventScroll:true});
+    } else target.focus({preventScroll:true});
+  };
+  window.addEventListener("load", updateTutorial);
+  document.addEventListener("DOMContentLoaded", updateTutorial);
+}
+
+function confirmAction(title, message, actionLabel) {
+  const dialog = document.getElementById("confirmActionDialog");
+  if (dialog.open) return Promise.resolve(false);
+  document.getElementById("confirmActionTitle").textContent = title;
+  document.getElementById("confirmActionMessage").textContent = message;
+  document.getElementById("confirmActionButton").textContent = actionLabel;
+  dialog.returnValue = "cancel";
+  return new Promise(resolve => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once:true });
+    dialog.showModal();
+  });
+}
+
+let resetConfirmationPending = false;
+async function startAfresh() {
+  if (resetConfirmationPending) return;
+  resetConfirmationPending = true;
+  try {
+    if (!await confirmAction("Start afresh? — Warning 1 of 2",
+      "This will clear all data saved by this alternative scanner in this browser: student results, the answer key, exam paper title, cached student data, corrections and issue history. Loaded scans and unsaved edits will also be discarded. Export any results you need before continuing.", "Continue")) return;
+    if (!await confirmAction("Delete all scanner data? — Final warning",
+      "This cannot be undone. Confirm only if you are ready to permanently delete the saved scanner data and start a new session. Original PDFs and downloaded files will not be deleted. This version will return to an empty student directory; upload your CSV again to continue.", "Delete data and start afresh")) return;
+    try {
+      for (const key of [LS_RESULTS_KEY, LS_ANSWER_KEY, LS_STUDENTS_KEY, LS_EXAM_TITLE]) localStorage.removeItem(key);
+    } catch (error) {
+      console.error("Could not clear scanner storage", error);
+      showIndexError("Could not clear all saved scanner data. Please check your browser storage permissions and try again.");
+      return;
+    }
+    // Both warnings explicitly cover unsaved editor changes; avoid a third browser prompt.
+    document.getElementById("integratedEditor").contentWindow?.prepareForScannerReset?.();
+    window.location.reload();
+  } finally {
+    resetConfirmationPending = false;
+  }
+}
+
+function showIndexError(message) {
+  const dialog = document.getElementById("indexErrorDialog");
+  document.getElementById("indexErrorMessage").textContent = message;
+  if (!dialog.open) dialog.showModal();
+}
+
+/* ===== DOM ready: hook minor UI ===== */
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("issueFilters").addEventListener("change", renderIssueChecklist);
+  document.getElementById("startAfresh").onclick = startAfresh;
+  document.getElementById("openInstructions").onclick = () => document.getElementById("instructionsDialog").showModal();
+  const btnApplyId = document.getElementById("btnApplyId");
+  if (btnApplyId) {
+    btnApplyId.addEventListener("click", () => {
+      const p = currentPage;
+      const val = (document.getElementById("idOverride")?.value || "").trim();
+      const meta = pageSummaries[p];
+      if (!meta) {
+        setStatus("No processed data for this page yet.");
+        return;
+      }
+      const pageTag = meta.pageTag;
+      const candidate = val || meta.idFromSheet || "";
+      if (!/^[A-Z0-9]{4}$/.test(candidate)) {
+        showIndexError("Enter a four-character student index, such as 2E05.");
+        return;
+      }
+      const duplicate = results.some(line => {
+        const cells = line.split(";");
+        return cells[0] !== pageTag && cells.slice(1, 5).join("").trim().toUpperCase() === candidate;
+      });
+      if (duplicate) {
+        showIndexError(`Student index ${candidate} is already used by another entry. Each student index must be unique.`);
+        return;
+      }
+      if (val) idOverrides.set(pageTag, val);
+      else idOverrides.delete(pageTag);
+
+      // Update the specific line in All results with the override index chars
+      meta.correctedIndex = val;
+      applyOverrideToResults(pageTag, val || meta.originalIndex || meta.idFromSheet);
+
+      // Recompute issues across all pages and refresh the Issues panel
+      recomputeIssues();
+
+      // Refresh summary and report preview
+      renderSummaryForPage(p);
+      renderCurrentReportPreview(p);
+
+      renderPreview();
+      setStatus("Student ID override applied. Corrected index circles are shaded red on the scanned sheet.");
+    });
+  }
+  const btnSave = document.getElementById("btnSaveKey");
+  if (btnSave) btnSave.addEventListener("click", saveAnswerKey);
+  const btnClear = document.getElementById("btnClearKey");
+  if (btnClear) btnClear.addEventListener("click", clearAnswerKey);
+
+  document.getElementById("studentSearchForm").addEventListener("submit", searchStudentIndex);
+  document.getElementById("studentNameSearch").addEventListener("input", searchStudentIndex);
+  document.getElementById("downloadStudentTemplate").addEventListener("click",downloadStudentTemplate);
+  document.getElementById("studentListFile").addEventListener("change",uploadStudentList);
+  loadStudentList();
+
+
+});
+
+function applyOverrideToResults(pageTag, overrideStr){
+  try {
+    if (!pageTag) return;
+    const indexCols = TEMPLATE.index.rows || 4;
+    const chars = (overrideStr || "").toUpperCase().split("");
+
+    results = results.map(line => {
+      const cells = line.split(";");
+      if (cells[0] === pageTag) {
+        for (let i = 0; i < indexCols; i++) {
+          cells[1 + i] = chars[i] || "";
+        }
+        return cells.join(";");
+      }
+      return line;
+    });
+
+    outEl.textContent = results.join("\n");
+    saveStoredResults();
+  } catch (e) {
+    console.warn("Failed to apply override to results:", e);
+  }
+}
+
+function recomputeIssues() {
+  const active = new Map();
+  const entries = results.map((line, position) => {
+    const cells = line.split(";");
+    return { position, tag: cells[0], id: (idOverrides.get(cells[0]) || cells.slice(1, 5).join("")).trim().toUpperCase(), answers: cells.slice(5) };
+  });
+  const counts = new Map();
+  entries.forEach(entry => { if (entry.id) counts.set(entry.id, (counts.get(entry.id) || 0) + 1); });
+  const add = (key, text) => active.set(key, text);
+  for (const entry of entries) {
+    // Include the row position so equal source filenames remain separate issues.
+    const prefix = `${entry.position}:${entry.tag}`;
+    entry.answers.forEach((answer, i) => {
+      if (!answer.trim()) add(`${prefix}:blank:${i}`, `${entry.tag}: Q${i + 1} — Missing answer`);
+      else if (answer.includes("+")) add(`${prefix}:multi:${i}`, `${entry.tag}: Q${i + 1} — Multiple answers (${answer})`);
+    });
+    if (!entry.id) add(`${prefix}:id`, `${entry.tag}: Student ID is empty`);
+    else if (!/^[A-Z0-9]{4}$/.test(entry.id) || (studentMap.size && !studentMap.has(entry.id))) add(`${prefix}:id`, `${entry.tag}: Student ID not found in list: ${entry.id}`);
+    if ((counts.get(entry.id) || 0) > 1) add(`${prefix}:duplicate`, `${entry.tag}: Duplicated student ID: ${entry.id}`);
+  }
+  processingFailures.forEach((message, page) => add(`processing:${page}`, `${page}: ${message}`));
+  for (const [key, text] of active) {
+    const type = key.startsWith("processing:") ? "processing"
+      : /:blank:\d+$/.test(key) ? "blank"
+      : /:multi:\d+$/.test(key) ? "multi"
+      : key.endsWith(":duplicate") ? "duplicate" : "id";
+    const pageTag = key.startsWith("processing:") ? null : key.replace(/^\d+:/, "").replace(/:(?:blank:\d+|multi:\d+|duplicate|id)$/, "") || null;
+    issueHistory.set(key, { text, type, resolved:false, pageTag });
+  }
+  for (const [key, issue] of issueHistory) issue.resolved = !active.has(key);
+  issues = [...active.values()];
+  renderIssueChecklist();
+}
+
+function jumpToIssuePage(pageTag) {
+  if (!pageTag) return;
+  const pageIndex = pageSummaries.findIndex(meta => meta && meta.pageTag === pageTag);
+  if (pageIndex === -1) return;
+  currentPage = pageIndex;
+  renderPreview();
+  renderSummaryForPage(currentPage);
+  renderCurrentReportPreview(currentPage);
+  updateStudentArea();
+  const pageNumEl = document.getElementById("pageNum");
+  if (pageNumEl) pageNumEl.textContent = String(currentPage);
+}
+
+function renderIssueChecklist() {
+  const list = document.getElementById("issues");
+  if (!list) return;
+  list.replaceChildren();
+  const shownTypes = new Set(Array.from(document.querySelectorAll("#issueFilters input:checked"), input => input.value));
+  list.dataset.emptyMessage = issueHistory.size ? "No issues match the selected types." : "No issues detected yet.";
+  const priority = {id:0, duplicate:1, processing:2, multi:3, blank:4};
+  const ordered = [...issueHistory.values()].sort((a,b) => Number(a.resolved)-Number(b.resolved) || priority[a.type]-priority[b.type]);
+  for (const issue of ordered) {
+    if (!shownTypes.has(issue.type)) continue;
+    const item = document.createElement("li");
+    item.className = issue.resolved ? "resolved" : ["id", "duplicate"].includes(issue.type) ? "priority-id" : "";
+    item.style.cursor = issue.pageTag ? "pointer" : "default";
+    if (issue.pageTag) {
+      item.title = "Jump to this student's sheet";
+      item.tabIndex = 0;
+      item.setAttribute("role", "button");
+      const goToIssue = () => {
+        jumpToIssuePage(issue.pageTag);
+        if (["id", "duplicate"].includes(issue.type) && !issue.resolved) {
+          const input = document.getElementById("idOverride");
+          if (tutorialEnabled) ["idOverride", "btnApplyId"].forEach(id => document.getElementById(id).classList.add("tutorial-focus"));
+          input.scrollIntoView({behavior:"smooth", block:"center"});
+          input.focus({preventScroll:true});
+        }
+      };
+      item.addEventListener("click", goToIssue);
+      item.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          goToIssue();
+        }
+      });
+    }
+    const symbol = document.createElement("span");
+    symbol.className = "issue-symbol";
+    symbol.textContent = issue.resolved ? "☑" : "☐";
+    symbol.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.textContent = `${!issue.resolved && ["id", "duplicate"].includes(issue.type) ? "Fix ID first · " : ""}${issue.text} — ${issue.resolved ? "Rectified" : "Unresolved"}`;
+    item.append(symbol, text);
+    list.appendChild(item);
+  }
+  updateTutorial();
+}
+/* ===== SAFETY: only bind if present (prevents load-time crash) ===== */
+const btnPrint = document.getElementById("btnPrint");
+if (btnPrint) btnPrint.onclick = () => {
+  // If you add a Print button back to DOM, this will work.
+  // Currently not shown; we keep this guard to avoid runtime error.
+  const p = currentPage;
+  const printArea = document.getElementById("printArea");
+  if (printArea) {
+    printArea.innerHTML = buildReportHTMLForPage(p, 'print');
+    window.print();
+  }
+};
+
+const EDITOR_DOCUMENT = "\u003c!doctype html>\n\u003chtml lang=\"en\">\n\u003chead>\n  \u003cmeta charset=\"utf-8\">\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  \u003ctitle>OMS Results Editor\u003c/title>\n  \u003cstyle>\n    :root{color-scheme:dark;--bg:#0b0f1e;--card:#0e152b;--line:#26324d;--muted:#94a3b8;--accent:#22d3ee}*{box-sizing:border-box}\n    body{margin:0;padding:18px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#e5e7eb}\n    header{position:sticky;top:0;z-index:3;margin:-18px -18px 16px;padding:14px 18px;background:rgba(11,15,30,.96);border-bottom:1px solid var(--line)}\n    h1{margin:0;font-size:21px}.sub{margin-top:5px;color:var(--muted);font-size:13px}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}\n    button,a.button{border:1px solid #43506b;border-radius:8px;padding:8px 12px;color:#e5e7eb;background:#111827;font:inherit;cursor:pointer;text-decoration:none}button.primary{border-color:var(--accent);background:#164e63}button:disabled{opacity:.5;cursor:not-allowed}\n    #status{color:var(--muted);font-size:13px}#status.dirty{color:#fbbf24}#status.saved{color:#4ade80}\n    .table-shell{overflow:auto;max-height:calc(100vh - 165px);border:1px solid var(--line);border-radius:12px;background:var(--card)}\n    table{border-collapse:separate;border-spacing:0;min-width:100%;font-size:13px}th,td{padding:6px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}\n    th{position:sticky;top:0;z-index:2;background:#17203a;color:#cbd5e1}th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:#111a31;text-align:left}th:first-child{z-index:3;background:#17203a}\n    input{width:42px;padding:7px 4px;border:1px solid #3a4762;border-radius:6px;background:#080d1a;color:#f8fafc;text-align:center;text-transform:uppercase;font:inherit}input.index{width:82px;letter-spacing:1px}input.invalid{border-color:#f87171;background:#3f151d}\n    .keybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.keybar label{font-size:13px;font-weight:650}.keybar input.answer-key{width:min(460px,100%);padding:8px 10px;text-align:left;letter-spacing:.08em}.keybar .dirty{color:#fbbf24}.keybar .saved{color:#4ade80}\n    .empty{padding:36px;text-align:center;color:var(--muted)}.row-number{color:var(--muted);margin-right:7px}\n  dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1px solid #43506b;border-radius:16px;padding:24px;background:#101f32;color:#f4f7fb;box-shadow:0 24px 80px #0008}dialog::backdrop{background:#0009}dialog h2{margin-top:0;font-size:20px}dialog li{margin:8px 0}dialog a{color:#5eead4}dialog form{display:flex;justify-content:flex-end;margin-top:18px}\u003c/style>\n\u003cstyle>body{background:#0b1828}header{position:static}main{padding-top:16px}.header-inner,main{width:calc(100% - 24px)}.table-shell{max-height:65vh}.hero h2{font-size:24px}\u003c/style>\u003c/head>\n\u003cbody>\n  \u003cheader>\n    \u003ch1>Edit student entries\u003c/h1>\n    \u003cdiv class=\"sub\">Edit index numbers and answers. Answers may be blank, A\u2013E, or multiple selections such as A+B.\u003c/div>\n    \u003cdiv class=\"toolbar\">\n      \u003cbutton id=\"save\" class=\"primary\" disabled>Save all changes\u003c/button>\n      \u003cbutton id=\"export\" disabled>Export CSV\u003c/button>\n      \u003cbutton id=\"reload\">Discard changes\u003c/button>\n      \n      \u003cspan id=\"status\">Loading\u2026\u003c/span>\n    \u003c/div>\n    \u003cdiv class=\"keybar\">\n      \u003clabel for=\"answerKey\">Answer key (X = void, excluded from scores)\u003c/label>\n      \u003cinput id=\"answerKey\" class=\"answer-key\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"A X C D \u2026 or AXCD\u2026 (X = void)\">\n      \u003cbutton id=\"saveKey\">Save answer key\u003c/button>\n      \u003cspan id=\"keyStatus\" class=\"sub\">No answer key saved\u003c/span>\n    \u003c/div>\n  \u003c/header>\n  \u003cmain class=\"table-shell\" id=\"shell\">\u003cdiv class=\"empty\">Loading stored results\u2026\u003c/div>\u003c/main>\n\u003cdialog id=\"confirmActionDialog\" aria-labelledby=\"confirmActionTitle\" aria-describedby=\"confirmActionMessage\">\n  \u003ch2 id=\"confirmActionTitle\">Confirm action\u003c/h2>\n  \u003cp id=\"confirmActionMessage\">\u003c/p>\n  \u003cform method=\"dialog\" style=\"display:flex;justify-content:flex-end;gap:8px\">\n    \u003cbutton value=\"cancel\" autofocus>Cancel\u003c/button>\n    \u003cbutton id=\"confirmActionButton\" value=\"confirm\">Confirm\u003c/button>\n  \u003c/form>\n\u003c/dialog>\n\u003cdialog id=\"indexErrorDialog\" aria-labelledby=\"indexErrorTitle\">\u003ch2 id=\"indexErrorTitle\">Student index error\u003c/h2>\u003cp id=\"indexErrorMessage\">\u003c/p>\u003cform method=\"dialog\">\u003cbutton autofocus>OK\u003c/button>\u003c/form>\u003c/dialog>\n  \u003cscript>\n    const STORAGE_KEY=\"oms2.results\",INDEX_COLUMNS=4;\n    const shell=document.getElementById(\"shell\"),saveButton=document.getElementById(\"save\"),exportButton=document.getElementById(\"export\"),reloadButton=document.getElementById(\"reload\"),status=document.getElementById(\"status\"),answerKeyInput=document.getElementById(\"answerKey\"),saveKeyButton=document.getElementById(\"saveKey\"),keyStatus=document.getElementById(\"keyStatus\");\n    let rows=[],dirty=false,stale=false;\n    function confirmAction(title, message, actionLabel) {\n  const dialog = document.getElementById(\"confirmActionDialog\");\n  if (dialog.open) return Promise.resolve(false);\n  document.getElementById(\"confirmActionTitle\").textContent = title;\n  document.getElementById(\"confirmActionMessage\").textContent = message;\n  document.getElementById(\"confirmActionButton\").textContent = actionLabel;\n  dialog.returnValue = \"cancel\";\n  return new Promise(resolve => {\n    dialog.addEventListener(\"close\", () => resolve(dialog.returnValue === \"confirm\"), { once:true });\n    dialog.showModal();\n  });\n}\n\nfunction showIndexError(message) {\n  const dialog = document.getElementById(\"indexErrorDialog\");\n  document.getElementById(\"indexErrorMessage\").textContent = message;\n  if (!dialog.open) dialog.showModal();\n}\nfunction validateUniqueIndices(showPopup = true) {\n      const counts = new Map();\n      rows.forEach(row => { const id = normalizeIndex(row.index); if (id) counts.set(id, (counts.get(id) || 0) + 1); });\n      const duplicates = [...counts].filter(([id, count]) => count > 1).map(([id]) => id);\n      shell.querySelectorAll(\"input.index\").forEach((input, i) => {\n        const id = normalizeIndex(rows[i].index);\n        input.classList.toggle(\"invalid\", id.length !== INDEX_COLUMNS || duplicates.includes(id));\n      });\n      if (duplicates.length && showPopup) showIndexError(`Each student index must be unique. Duplicate ${duplicates.length === 1 ? \"index\" : \"indices\"}: ${duplicates.join(\", \")}. Correct these entries before saving or exporting.`);\n      return duplicates.length === 0;\n    }\n    function parseStoredRows(){const raw=localStorage.getItem(STORAGE_KEY),stored=raw?JSON.parse(raw):[];if(!Array.isArray(stored))throw new Error(\"Stored results are not a list.\");return stored.map((line,position)=>{const cells=String(line).split(\";\");return{pageTag:cells[0]||`Entry ${position+1}`,index:cells.slice(1,1+INDEX_COLUMNS).join(\"\"),answers:cells.slice(1+INDEX_COLUMNS)}})}\n    function answerCount(){return Math.max(0,...rows.map(row=>row.answers.length))}\n    function normalizeIndex(value){return value.toUpperCase().replace(/[^0-9A-Z]/g,\"\").slice(0,INDEX_COLUMNS)}\n    function normalizeAnswer(value){const letters=value.toUpperCase().match(/[A-E]/g)||[];return[...new Set(letters)].sort().join(\"+\")}\n    function parseAnswerKey(value){const text=String(value||\"\").trim().toUpperCase(),groups=text.split(/[^A-EX]+/).filter(Boolean);if(groups.length===1&&groups[0].length>1)return[...groups[0]].filter(letter=>/[A-EX]/.test(letter));return groups.map(value=>value===\"X\"?\"X\":normalizeAnswer(value)).filter(Boolean)}\n    function loadAnswerKey(){let key=[];try{const saved=JSON.parse(localStorage.getItem(\"oms2.answerKey\"));if(Array.isArray(saved))key=saved}catch{}answerKeyInput.value=key.join(\" \");keyStatus.textContent=key.length?`${key.length} answers saved`:\"No answer key saved\"}\n    function markDirty(){dirty=true;saveButton.disabled=stale;status.textContent=stale?\"New scan results are available. Discard changes to reload before editing.\":\"Unsaved changes\";status.className=\"dirty\"}\n    function render(){\n      if(!rows.length){shell.innerHTML='\u003cdiv class=\"empty\">No stored results yet. Process a PDF in the scanner first.\u003c/div>';exportButton.disabled=true;status.textContent=\"0 entries\";return}\n      const questions=answerCount(),table=document.createElement(\"table\"),head=document.createElement(\"thead\"),headerRow=document.createElement(\"tr\");\n      [\"Source page\",\"Index number\",...Array.from({length:questions},(_,i)=>`Q${i+1}`)].forEach(label=>{const th=document.createElement(\"th\");th.textContent=label;headerRow.appendChild(th)});head.appendChild(headerRow);table.appendChild(head);\n      const body=document.createElement(\"tbody\");rows.forEach((row,rowIndex)=>{while(row.answers.length\u003cquestions)row.answers.push(\"\");const tr=document.createElement(\"tr\"),source=document.createElement(\"td\"),number=document.createElement(\"span\");number.className=\"row-number\";number.textContent=`${rowIndex+1}.`;source.append(number,document.createTextNode(row.pageTag));tr.appendChild(source);\n        const indexCell=document.createElement(\"td\"),indexInput=document.createElement(\"input\");indexInput.className=\"index\";indexInput.value=row.index;indexInput.maxLength=INDEX_COLUMNS;indexInput.setAttribute(\"aria-label\",`Index number for ${row.pageTag}`);indexInput.classList.toggle(\"invalid\",row.index.length!==INDEX_COLUMNS);indexInput.addEventListener(\"input\",()=>{const normalized=normalizeIndex(indexInput.value);if(indexInput.value!==normalized)indexInput.value=normalized;row.index=normalized;indexInput.classList.toggle(\"invalid\",normalized.length!==INDEX_COLUMNS);markDirty()});indexInput.addEventListener(\"change\",()=>validateUniqueIndices());indexCell.appendChild(indexInput);tr.appendChild(indexCell);\n        row.answers.forEach((answer,questionIndex)=>{const td=document.createElement(\"td\"),input=document.createElement(\"input\");input.value=answer;input.setAttribute(\"aria-label\",`${row.pageTag}, question ${questionIndex+1}`);input.addEventListener(\"input\",markDirty);input.addEventListener(\"change\",()=>{const normalized=normalizeAnswer(input.value);input.value=normalized;row.answers[questionIndex]=normalized});td.appendChild(input);tr.appendChild(td)});body.appendChild(tr)});table.appendChild(body);shell.replaceChildren(table);exportButton.disabled=false;status.textContent=`${rows.length} ${rows.length===1?\"entry\":\"entries\"}, ${questions} questions`;status.className=\"\"}\n    function load(){try{rows=parseStoredRows();dirty=false;stale=false;saveButton.disabled=true;render()}catch(error){shell.innerHTML=`\u003cdiv class=\"empty\">Could not read stored results: ${error.message}\u003c/div>`;status.textContent=\"Load failed\"}}\n    saveButton.addEventListener(\"click\",()=>{if(!validateUniqueIndices())return;if(stale)return;const invalid=shell.querySelector(\"input.index.invalid\");if(invalid){invalid.focus();status.textContent=\"Every index number must contain exactly 4 letters or digits.\";status.className=\"dirty\";return}shell.querySelectorAll(\"tbody tr\").forEach((tr,rowIndex)=>{tr.querySelectorAll(\"td input:not(.index)\").forEach((input,questionIndex)=>{rows[rowIndex].answers[questionIndex]=normalizeAnswer(input.value)})});const serialized=rows.map(row=>{const indexCells=row.index.padEnd(INDEX_COLUMNS,\" \").slice(0,INDEX_COLUMNS).split(\"\");return[row.pageTag,...indexCells,...row.answers].join(\";\")});localStorage.setItem(STORAGE_KEY,JSON.stringify(serialized));dirty=false;saveButton.disabled=true;status.textContent=`Saved ${rows.length} entries. Scanner review and summary updated.`;status.className=\"saved\"});\n    exportButton.addEventListener(\"click\",()=>{if(!validateUniqueIndices())return;\n      const tableRows=[...shell.querySelectorAll(\"tbody tr\")],questions=answerCount();\n      let answerKey=[];\n      try{const saved=JSON.parse(localStorage.getItem(\"oms2.answerKey\"));if(Array.isArray(saved))answerKey=saved.map(value=>value===\"X\"?\"X\":normalizeAnswer(value))}catch{}\n      if(!answerKey.some(Boolean)){status.textContent=\"Save an answer key in the scanner before exporting the marks-for-check CSV.\";status.className=\"dirty\";return}\n      const questionHeaders=Array.from({length:questions},(_,i)=>[`Q${i+1}`,`Q${i+1} result`,`Q${i+1} correct answer`]).flat();\n      let students = [];\n      try {\n        const stored = JSON.parse(localStorage.getItem(\"oms2.students\") || \"[]\");\n        if (Array.isArray(stored)) students = stored;\n      } catch {}\n      const studentDirectory = new Map(students.map(student => [String(student.id || \"\").trim().toUpperCase(), student]));\n      const csvRows=[[\"Source page\",\"Index number\",\"Student name\",\"Class\",...questionHeaders]];\n      tableRows.forEach((tr,rowIndex)=>{\n        const inputs=[...tr.querySelectorAll(\"input\")],index=normalizeIndex(inputs[0].value),answers=inputs.slice(1).map(input=>normalizeAnswer(input.value));\n        const questionValues=answers.map((answer,i)=>{const correct=answerKey[i]||\"\";const result=correct===\"X\"?\"Voided\":correct?(answer===correct?\"Correct\":\"Incorrect\"):\"Not marked\";return[answer,result,result===\"Incorrect\"?correct:\"\"]}).flat();\n        const student = studentDirectory.get(index);\n        csvRows.push([rows[rowIndex].pageTag,index,student?.name || \"\",student?.cls || \"\",...questionValues]);\n      });\n      const escapeCsv=value=>`\"${String(value).replace(/\"/g,'\"\"')}\"`,csv=\"\\uFEFF\"+csvRows.map(row=>row.map(escapeCsv).join(\",\")).join(\"\\r\\n\"),blob=new Blob([csv],{type:\"text/csv;charset=utf-8\"}),url=URL.createObjectURL(blob),link=document.createElement(\"a\");\n      link.href=url;link.download=\"oms-marks-for-check.csv\";document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent=`Exported ${rows.length} graded entries to oms-marks-for-check.csv.`;status.className=\"saved\";\n    });\n    reloadButton.addEventListener(\"click\",async()=>{if(!dirty||await confirmAction(\"Discard unsaved edits?\", \"Your unsaved index and answer edits will be lost. The last saved entries will be restored.\", \"Discard edits\"))load()});\n    saveKeyButton.addEventListener(\"click\",()=>{const key=parseAnswerKey(answerKeyInput.value),questions=answerCount();if(!key.length){keyStatus.textContent=\"Enter at least one answer.\";keyStatus.className=\"sub dirty\";answerKeyInput.focus();return}if(questions&&key.length!==questions){keyStatus.textContent=`Key has ${key.length} answers; the entries have ${questions} questions.`;keyStatus.className=\"sub dirty\";return}localStorage.setItem(\"oms2.answerKey\",JSON.stringify(key));answerKeyInput.value=key.join(\" \");keyStatus.textContent=`Saved ${key.length} answers`;keyStatus.className=\"sub saved\";status.textContent=\"Answer key saved. CSV export will use this key.\";status.className=\"saved\"});\n    window.prepareForScannerReset = () => { dirty = false; };\n    window.addEventListener(\"beforeunload\",event=>{if(!dirty)return;event.preventDefault();event.returnValue=\"\"});load();\n    loadAnswerKey();\n    window.addEventListener(\"storage\", event => {\n      if (event.key === \"oms2.answerKey\") loadAnswerKey();\n      if (event.key === \"oms2.results\") {\n        if (dirty) { stale=true; saveButton.disabled=true; status.textContent = \"Scanner results changed. Discard changes to load the latest entries before saving.\"; return; }\n        load();\n      }\n    });\n  \u003c/script>\n\u003c/body>\n\u003c/html>\n";
+const SUMMARY_DOCUMENT = "\u003c!doctype html>\n\u003chtml lang=\"en\">\n\u003chead>\n  \u003cmeta charset=\"utf-8\">\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  \u003ctitle>Item Analysis\u003c/title>\n  \u003cstyle>\n    :root{color-scheme:dark;--bg:#07101d;--card:#0d1929;--card2:#101f32;--line:rgba(148,163,184,.18);--text:#f4f7fb;--muted:#91a2b8;--accent:#2dd4bf;--good:#4ade80;--bad:#fb7185;--blank:#64748b}\n    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 8% -10%,rgba(45,212,191,.15),transparent 32rem),radial-gradient(circle at 100% 0,rgba(59,130,246,.1),transparent 28rem),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}\n    header{border-bottom:1px solid var(--line);background:rgba(7,16,29,.82);backdrop-filter:blur(18px)}.header-inner,main{width:min(1180px,calc(100% - 32px));margin:auto}.header-inner{min-height:76px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;gap:13px;align-items:center}.brand-mark{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(45,212,191,.3);border-radius:13px;background:rgba(45,212,191,.11);color:#5eead4;font-size:20px}h1{font-size:18px;margin:0;letter-spacing:-.02em}.subtitle{margin:3px 0 0;color:var(--muted);font-size:12px}\n    a.button,button,select{min-height:40px;padding:8px 13px;border:1px solid var(--line);border-radius:10px;background:rgba(148,163,184,.07);color:#dce6f2;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}a.button:hover,button:hover{border-color:rgba(45,212,191,.5);background:rgba(45,212,191,.09)}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid rgba(45,212,191,.2);outline-offset:2px}.actions{display:flex;gap:8px;flex-wrap:wrap}\n    main{padding:32px 0 60px}.hero{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:20px}.eyebrow{color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.hero h2{margin:5px 0 5px;font-size:clamp(25px,4vw,38px);letter-spacing:-.04em}.hero p{margin:0;color:var(--muted);font-size:14px}.controls{flex-wrap:wrap;display:flex;align-items:center;gap:8px}.controls label{color:var(--muted);font-size:13px}\n    .notice{padding:28px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--muted);text-align:center}.notice strong{display:block;margin-bottom:5px;color:var(--text);font-size:17px}.notice a{color:#5eead4}\n    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}.metric{padding:18px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(180deg,rgba(17,31,50,.96),rgba(11,24,40,.97))}.metric-label{color:var(--muted);font-size:11px;font-weight:750;letter-spacing:.09em;text-transform:uppercase}.metric-value{margin-top:4px;font-size:25px;font-weight:780;letter-spacing:-.03em}.metric-note{margin-top:2px;color:var(--muted);font-size:12px}\n    .questions{display:grid;gap:12px}.question{display:grid;grid-template-columns:110px minmax(150px,1fr) minmax(280px,2.1fr);gap:22px;align-items:center;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,rgba(16,31,50,.96),rgba(11,24,40,.97))}.q-title{font-size:17px;font-weight:760}.answer{margin-top:5px;color:var(--muted);font-size:12px}.answer strong{color:#5eead4}.rate{display:flex;align-items:baseline;gap:8px}.rate-number{font-size:27px;font-weight:800;letter-spacing:-.04em}.rate-count{color:var(--muted);font-size:12px}.track{height:7px;margin-top:8px;overflow:hidden;border-radius:999px;background:rgba(148,163,184,.13)}.track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#14b8a6,#5eead4)}\n    .choices{display:grid;grid-template-columns:repeat(6,minmax(38px,1fr));gap:7px}.choice{min-width:0;padding:8px 6px;border:1px solid var(--line);border-radius:9px;background:rgba(3,10,20,.35);text-align:center}.choice.correct{border-color:rgba(74,222,128,.42);background:rgba(74,222,128,.08)}.choice-label{display:block;color:var(--muted);font-size:10px;font-weight:750}.choice.correct .choice-label{color:var(--good)}.choice-value{display:block;margin-top:2px;font-size:14px;font-weight:760}.choice-percent{display:block;color:var(--muted);font-size:9px}.question.needs-key .track span{background:var(--blank)}\n    @media(max-width:800px){.metrics{grid-template-columns:repeat(2,1fr)}.question{grid-template-columns:90px 1fr}.choices{grid-column:1/-1}.hero{align-items:flex-start;flex-direction:column}.controls{width:100%;justify-content:space-between}}\n    @media(max-width:520px){.header-inner{padding:12px 0;align-items:flex-start;flex-direction:column}.actions{width:100%}.actions a{flex:1;text-align:center}.metrics{grid-template-columns:1fr 1fr}.question{grid-template-columns:1fr;gap:12px}.choices{grid-column:auto;grid-template-columns:repeat(3,1fr)}main{padding-top:24px}}\n    @media print{body{background:#fff;color:#111}header,.controls{display:none}.hero p,.metric-note,.rate-count,.answer,.choice-label,.choice-percent{color:#555}.metric,.question,.choice{background:#fff;border-color:#ccc}.questions{gap:8px}main{width:100%;padding:0}.question{break-inside:avoid}.track{border:1px solid #aaa}}\n  \n    #compactPrintSummary { display:none; }\n    @page { size:A4 portrait; margin:10mm; }\n    @media print {\n      html, body { margin:0 !important; padding:0 !important; min-height:0 !important; }\n      body.compact-summary-print > header, body.compact-summary-print > main { display:none !important; }\n      body.compact-summary-print #compactPrintSummary { display:block; color:#111; font-family:Arial,sans-serif; }\n      #compactPrintSummary h1 { font-size:14pt; margin:0 0 3mm; }\n      #compactPrintSummary p { font-size:9pt; margin:0 0 3mm; }\n      #compactPrintSummary table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7.5pt; }\n      #compactPrintSummary th, #compactPrintSummary td { border:0.2mm solid #bbb; padding:0.6mm 0.3mm; height:5mm; line-height:1.1; text-align:center; white-space:nowrap; }\n      #compactPrintSummary th { background:#eee !important; color:#111; font-size:7pt; }\n      #compactPrintSummary th:first-child { width:7mm; }\n      #compactPrintSummary th:nth-child(2) { width:12mm; }\n      #compactPrintSummary tr { break-inside:avoid; }\n      #compactPrintSummary thead { display:table-header-group; }\n      #compactPrintSummary td.heatmap { background-color:var(--heatmap-color) !important; color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }\n      #compactPrintSummary td.key-option { font-weight:700; }\n      #compactPrintSummary .print-note { margin-top:2mm; font-size:7pt; }\n    }\n\u003c/style>\n\u003cstyle>body{background:#0b1828}header{position:static}main{padding-top:16px}.header-inner,main{width:calc(100% - 24px)}.table-shell{max-height:65vh}.hero h2{font-size:24px}\u003c/style>\u003cstyle>\n    @media screen {\n      .hero { margin-bottom:16px; align-items:center; }\n      .hero h2 { font-size:26px; letter-spacing:-.03em; }\n      .metrics { gap:10px; margin-bottom:16px; }\n      .metric { padding:14px 16px; box-shadow:none; }\n      .metric-value { font-size:28px; font-variant-numeric:tabular-nums; }\n      .questions { gap:8px; }\n      .question { grid-template-columns:90px minmax(125px,.8fr) minmax(300px,2fr); padding:14px 16px; gap:16px; border-radius:12px; }\n      .q-title { font-size:15px; }\n      .rate-number { font-size:24px; font-variant-numeric:tabular-nums; }\n      .rate { flex-wrap:wrap; gap:3px 8px; }\n      .choices { grid-template-columns:repeat(7,minmax(32px,1fr)); gap:5px; }\n      .choice { padding:7px 3px; border-radius:7px; }\n      .choice-value { font-variant-numeric:tabular-nums; }\n      .choice.correct { border-color:#2dd4bf; background:rgba(45,212,191,.14); }\n      .analysis-legend { color:var(--muted); font-size:12px; margin:0 0 12px; }\n      .analysis-legend strong { color:#5eead4; font-weight:600; }\n    }\n    @media screen and (max-width:800px) { .question { grid-template-columns:90px 1fr; } .choices { grid-column:1/-1; } }\n    @media screen and (max-width:440px) { .choices { grid-template-columns:repeat(4,1fr); } .hero h2 { font-size:22px; } }\n    @media print { .analysis-legend { display:none; } }\n\u003c/style>\u003c/head>\n\u003cbody>\n  \u003cheader>\u003cdiv class=\"header-inner\">\u003cdiv class=\"brand\">\u003cdiv class=\"brand-mark\" aria-hidden=\"true\">\u25a5\u003c/div>\u003cdiv>\u003ch1>Item Analysis\u003c/h1>\u003cp class=\"subtitle\">Optical Mark Sheet Scanner\u003c/p>\u003c/div>\u003c/div>\u003cdiv class=\"actions\">\u003cbutton id=\"printButton\" type=\"button\">Print A4 / Save PDF\u003c/button>\u003c/div>\u003c/div>\u003c/header>\n  \u003cmain>\n    \u003ch2 id=\"examPaperTitle\" hidden style=\"overflow-wrap:anywhere\">\u003c/h2>\n    \u003cdiv class=\"hero\">\u003cdiv>\u003cdiv class=\"eyebrow\">Item analysis\u003c/div>\u003ch2>Question performance\u003c/h2>\u003cp id=\"description\">A question-by-question breakdown of all stored responses.\u003c/p>\u003c/div>\u003cdiv class=\"controls\">\u003clabel for=\"classFilter\">Class\u003c/label>\u003cselect id=\"classFilter\">\u003coption value=\"\">All classes\u003c/option>\u003c/select>\u003clabel for=\"sort\">Sort by\u003c/label>\u003cselect id=\"sort\">\u003coption value=\"number\">Question number\u003c/option>\u003coption value=\"lowest\">Lowest score first\u003c/option>\u003coption value=\"highest\">Highest score first\u003c/option>\u003coption value=\"blank\">Most blanks first\u003c/option>\u003c/select>\u003c/div>\u003c/div>\n    \u003cp class=\"analysis-legend\">\u003cstrong>Highlighted option\u003c/strong> = answer key \u00b7 Each option shows its count and percentage \u00b7 Multi = multiple selections \u00b7 X = voided, excluded from scores and completion\u003c/p>\n    \u003cdiv id=\"content\" aria-live=\"polite\">\u003cdiv class=\"notice\">Loading stored results\u2026\u003c/div>\u003c/div>\n  \u003c/main>\n  \u003cscript>\n    const RESULTS_KEY=\"oms2.results\",ANSWER_KEY=\"oms2.answerKey\",INDEX_COLUMNS=4;\n    const content=document.getElementById(\"content\"),sortSelect=document.getElementById(\"sort\");\n    const classFilter=document.getElementById(\"classFilter\");\n    let summaries=[];\n    let examTitle = \"\";\n    function escapeTitle(value) {\n      return String(value).replace(/[&\u003c>\"']/g, character => ({\"&\":\"&amp;\",\"\u003c\":\"&lt;\",\">\":\"&gt;\",'\"':\"&quot;\",\"'\":\"&#39;\"}[character]));\n    }\n    function refreshExamTitle(value) {\n      try { examTitle = typeof value === \"string\" ? value : localStorage.getItem(\"oms2.examTitle\") || \"\"; } catch { examTitle = \"\"; }\n      const heading = document.getElementById(\"examPaperTitle\");\n      heading.textContent = examTitle.trim();\n      heading.hidden = !examTitle.trim();\n      prepareCompactPrintSummary();\n    }\n    window.addEventListener(\"storage\", event => { if (event.key === \"oms2.examTitle\" || event.key === null) refreshExamTitle(); });\n    refreshExamTitle();\n    function readJSON(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback}catch{return fallback}}\n    function normalizeAnswer(value){const letters=String(value||\"\").toUpperCase().match(/[A-E]/g)||[];return[...new Set(letters)].sort().join(\"+\")}\n    function loadData(){\n      const raw=readJSON(RESULTS_KEY,[]),key=readJSON(ANSWER_KEY,[]);\n      const entries=(Array.isArray(raw)?raw:[]).map(line=>String(line).split(\";\"));\n      const classOf=cells=>cells.slice(1,1+INDEX_COLUMNS).join(\"\").trim().toUpperCase().slice(0,2) || \"Unknown\";\n      const selected=classFilter.value,classes=[...new Set(entries.map(classOf))].sort();\n      classFilter.innerHTML='\u003coption value=\"\">All classes\u003c/option>'+classes.map(name=>`\u003coption value=\"${escapeTitle(name)}\">${escapeTitle(name)}\u003c/option>`).join(\"\");\n      classFilter.value=classes.includes(selected)?selected:\"\";\n      if(!Array.isArray(raw)||!raw.length){summaries=[];prepareCompactPrintSummary();content.innerHTML='\u003cdiv class=\"notice\">\u003cstrong>No results yet\u003c/strong>Process answer sheets in the scanner above, then return here to view the breakdown.\u003c/div>';return}\n      const rows=entries.filter(cells=>!classFilter.value||classOf(cells)===classFilter.value).map(cells=>cells.slice(1+INDEX_COLUMNS).map(normalizeAnswer));\n      const questionCount=Math.max(Array.isArray(key)?key.length:0,...rows.map(row=>row.length));\n      summaries=Array.from({length:questionCount},(_,index)=>{\n        const voided=Array.isArray(key)&&String(key[index]).trim().toUpperCase()===\"X\",correct=voided?\"\":normalizeAnswer(Array.isArray(key)?key[index]:\"\"),counts={A:0,B:0,C:0,D:0,E:0,Blank:0,Other:0};let correctCount=0;\n        rows.forEach(row=>{const answer=row[index]||\"\";if(!answer)counts.Blank++;else if(Object.hasOwn(counts,answer))counts[answer]++;else counts.Other++;if(correct&&answer===correct)correctCount++});\n        return{number:index+1,voided,correct,counts,correctCount,total:rows.length,rate:correct?correctCount/rows.length:null,blankRate:counts.Blank/rows.length};\n      });\n      const marked=summaries.filter(item=>item.rate!==null),answered=summaries.filter(item=>!item.voided).reduce((sum,item)=>sum+item.total-item.counts.Blank,0),possible=rows.length*summaries.filter(item=>!item.voided).length,average=marked.length?marked.reduce((sum,item)=>sum+item.rate,0)/marked.length:null;\n      document.getElementById(\"description\").textContent=`Class: ${classFilter.value||\"All classes\"}. Based on ${rows.length} ${rows.length===1?\"student\":\"students\"} and ${questionCount} ${questionCount===1?\"question\":\"questions\"}.`;\n      const metrics=`\u003csection class=\"metrics\">\u003cdiv class=\"metric\">\u003cdiv class=\"metric-label\">Students\u003c/div>\u003cdiv class=\"metric-value\">${rows.length}\u003c/div>\u003cdiv class=\"metric-note\">Stored answer sheets\u003c/div>\u003c/div>\u003cdiv class=\"metric\">\u003cdiv class=\"metric-label\">Questions\u003c/div>\u003cdiv class=\"metric-value\">${questionCount}\u003c/div>\u003cdiv class=\"metric-note\">Across all sheets\u003c/div>\u003c/div>\u003cdiv class=\"metric\">\u003cdiv class=\"metric-label\">Average accuracy\u003c/div>\u003cdiv class=\"metric-value\">${average===null?\"\u2014\":Math.round(average*100)+\"%\"}\u003c/div>\u003cdiv class=\"metric-note\">${marked.length?`Across ${marked.length} keyed questions`:\"No scored questions\"}\u003c/div>\u003c/div>\u003cdiv class=\"metric\">\u003cdiv class=\"metric-label\">Completion\u003c/div>\u003cdiv class=\"metric-value\">${possible?Math.round(answered/possible*100)+\"%\":\"\u2014\"}\u003c/div>\u003cdiv class=\"metric-note\">${possible-answered} blank ${possible-answered===1?\"response\":\"responses\"}\u003c/div>\u003c/div>\u003c/section>`;\n      content.innerHTML=metrics+'\u003csection class=\"questions\" id=\"questions\">\u003c/section>';renderQuestions();\n    }\n    function renderQuestions(){\n      prepareCompactPrintSummary();\n      if (!document.getElementById(\"questions\")) return;\n      const list=[...summaries],mode=sortSelect.value;\n      if(mode===\"lowest\")list.sort((a,b)=>(a.rate??2)-(b.rate??2)||a.number-b.number);else if(mode===\"highest\")list.sort((a,b)=>(b.rate??-1)-(a.rate??-1)||a.number-b.number);else if(mode===\"blank\")list.sort((a,b)=>b.blankRate-a.blankRate||a.number-b.number);\n      document.getElementById(\"questions\").innerHTML=list.map(item=>{\n        const rate=item.rate===null?null:Math.round(item.rate*100),choiceNames=[\"A\",\"B\",\"C\",\"D\",\"E\",\"Blank\"],extra=`\u003cdiv class=\"choice\">\u003cspan class=\"choice-label\">MULTI\u003c/span>\u003cspan class=\"choice-value\">${item.counts.Other}\u003c/span>\u003cspan class=\"choice-percent\">${Math.round(item.counts.Other/item.total*100)}%\u003c/span>\u003c/div>`;\n        const choices=choiceNames.map(name=>`\u003cdiv class=\"choice ${item.correct===name?\"correct\":\"\"}\">\u003cspan class=\"choice-label\">${name.toUpperCase()}\u003c/span>\u003cspan class=\"choice-value\">${item.counts[name]}\u003c/span>\u003cspan class=\"choice-percent\">${Math.round(item.counts[name]/item.total*100)}%\u003c/span>\u003c/div>`).join(\"\")+extra;\n        return `\u003carticle class=\"question ${rate===null?\"needs-key\":\"\"}\">\u003cdiv>\u003cdiv class=\"q-title\">Question ${item.number}\u003c/div>\u003cdiv class=\"answer\">Correct answer: \u003cstrong>${item.voided?\"X \u2014 Voided\":item.correct||\"Not set\"}\u003c/strong>\u003c/div>\u003c/div>\u003cdiv>\u003cdiv class=\"rate\">\u003cspan class=\"rate-number\">${rate===null?\"\u2014\":rate+\"%\"}\u003c/span>\u003cspan class=\"rate-count\">${item.voided?\"Excluded from scores\":rate===null?\"Not marked\":`${item.correctCount} of ${item.total} correct`}\u003c/span>\u003c/div>\u003cdiv class=\"track\" aria-hidden=\"true\">\u003cspan style=\"width:${rate??0}%\">\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"choices\">${choices}\u003c/div>\u003c/article>`;\n      }).join(\"\");\n    }\n\n    // White at 0%; stronger green for correct options, yellow to red for distractors.\n    function printOptionCell(question, choice) {\n      const count = question.counts[choice];\n      const share = question.total ? count / question.total : 0;\n      const correct = choice === question.correct;\n      const gradedOption = Boolean(question.correct) && /^[A-E]$/.test(choice);\n      let style = \"\";\n      if (gradedOption) {\n        const fraction = Math.max(0, Math.min(1, share));\n        const start = correct || fraction \u003c= 0.5 ? [255,255,255] : [255,224,102];\n        const end = correct ? [76,190,112] : fraction \u003c= 0.5 ? [255,224,102] : [239,100,100];\n        const strength = correct ? fraction : fraction \u003c= 0.5 ? fraction * 2 : (fraction - 0.5) * 2;\n        const rgb = start.map((value,i)=>Math.round(value+(end[i]-value)*strength));\n        style = ` style=\"--heatmap-color:rgb(${rgb.join(\",\")})\"`;\n      }\n      return `\u003ctd class=\"${gradedOption ? \"heatmap\" : \"\"}${correct ? \" key-option\" : \"\"}\"${style}>${count} (${Math.round(share*100)}%)\u003c/td>`;\n    }\n\n    function prepareCompactPrintSummary() {\n      const compact = summaries.length > 0 && summaries.length \u003c 40;\n      document.body.classList.toggle(\"compact-summary-print\", compact);\n      let print = document.getElementById(\"compactPrintSummary\");\n      if (!print) { print = document.createElement(\"section\"); print.id = \"compactPrintSummary\"; document.body.appendChild(print); }\n      if (!compact) { print.replaceChildren(); return; }\n      const list = [...summaries], mode = sortSelect.value;\n      if (mode === \"lowest\") list.sort((a,b)=>(a.rate??2)-(b.rate??2)||a.number-b.number);\n      else if (mode === \"highest\") list.sort((a,b)=>(b.rate??-1)-(a.rate??-1)||a.number-b.number);\n      else if (mode === \"blank\") list.sort((a,b)=>b.blankRate-a.blankRate||a.number-b.number);\n      const marked = list.filter(q=>q.rate!==null);\n      const accuracy = marked.length ? Math.round(marked.reduce((sum,q)=>sum+q.rate,0)/marked.length*100)+\"%\" : \"Not marked\";\n      const active = list.filter(q=>!q.voided), total = list[0].total, blanks = active.reduce((sum,q)=>sum+q.counts.Blank,0);\n      const completion = total && active.length ? Math.round((1-blanks/(total*active.length))*100)+\"%\" : \"\u2014\";\n      const choices = [\"A\",\"B\",\"C\",\"D\",\"E\",\"Blank\",\"Other\"];\n      print.innerHTML = `${examTitle.trim() ? `\u003ch1 style=\"overflow-wrap:anywhere\">${escapeTitle(examTitle.trim())}\u003c/h1>` : \"\"}\u003ch1>Item analysis \u2014 ${escapeTitle(classFilter.value||\"All classes\")}\u003c/h1>\u003cp>${total} students \u00b7 ${list.length} questions \u00b7 Average accuracy: ${accuracy} \u00b7 Completion: ${completion}\u003c/p>\n        \u003ctable>\u003cthead>\u003ctr>\u003cth>Q\u003c/th>\u003cth>Key\u003c/th>\u003cth>Correct\u003c/th>\u003cth>Accuracy\u003c/th>${choices.map(c=>`\u003cth>${c === \"Other\" ? \"Multi\" : c}\u003c/th>`).join(\"\")}\u003c/tr>\u003c/thead>\n        \u003ctbody>${list.map(q=>`\u003ctr>\u003ctd>${q.number}\u003c/td>\u003ctd>${q.voided?\"X (void)\":q.correct||\"\u2014\"}\u003c/td>\u003ctd>${q.rate===null?\"\u2014\":q.correctCount+\"/\"+q.total}\u003c/td>\u003ctd>${q.rate===null?\"\u2014\":Math.round(q.rate*100)+\"%\"}\u003c/td>${choices.map(c=>printOptionCell(q,c)).join(\"\")}\u003c/tr>`).join(\"\")}\u003c/tbody>\u003c/table>\n        \u003cp class=\"print-note\">Answer columns show count (percentage). Blank = no answer; Multi = multiple selections \u00b7 X = voided, excluded from scores and completion. Accuracy uses questions with a saved answer key. X = voided; excluded from scores and completion. Heatmap: correct options deepen from white to green as selection increases (0\u2013100%); wrong options deepen from white through yellow (50%) to red (100%). Blank, Multi and unkeyed questions are uncoloured.\u003c/p>`;\n    }\n    window.addEventListener(\"beforeprint\", prepareCompactPrintSummary);\n\n    classFilter.addEventListener(\"change\",loadData);sortSelect.addEventListener(\"change\",renderQuestions);document.getElementById(\"printButton\").addEventListener(\"click\",()=>{prepareCompactPrintSummary();window.print();});window.addEventListener(\"storage\",loadData);loadData();\n  \u003c/script>\n\u003c/body>\n\u003c/html>\n";
+const CLASS_DOCUMENT = "\u003c!doctype html>\n\u003chtml lang=\"en\">\n\u003chead>\n  \u003cmeta charset=\"utf-8\">\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  \u003ctitle>Class performance\u003c/title>\n  \u003cstyle>\n    :root{color-scheme:dark;--bg:#07101d;--card:#0d1929;--card2:#101f32;--line:rgba(148,163,184,.18);--text:#f4f7fb;--muted:#91a2b8;--accent:#2dd4bf;--good:#4ade80;--bad:#fb7185;--blank:#64748b}\n    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 8% -10%,rgba(45,212,191,.15),transparent 32rem),radial-gradient(circle at 100% 0,rgba(59,130,246,.1),transparent 28rem),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}\n    header{border-bottom:1px solid var(--line);background:rgba(7,16,29,.82);backdrop-filter:blur(18px)}.header-inner,main{width:min(1180px,calc(100% - 32px));margin:auto}.header-inner{min-height:76px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;gap:13px;align-items:center}.brand-mark{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(45,212,191,.3);border-radius:13px;background:rgba(45,212,191,.11);color:#5eead4;font-size:20px}h1{font-size:18px;margin:0;letter-spacing:-.02em}.subtitle{margin:3px 0 0;color:var(--muted);font-size:12px}\n    a.button,button,select{min-height:40px;padding:8px 13px;border:1px solid var(--line);border-radius:10px;background:rgba(148,163,184,.07);color:#dce6f2;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}a.button:hover,button:hover{border-color:rgba(45,212,191,.5);background:rgba(45,212,191,.09)}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid rgba(45,212,191,.2);outline-offset:2px}.actions{display:flex;gap:8px;flex-wrap:wrap}\n    main{padding:32px 0 60px}.hero{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:20px}.eyebrow{color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.hero h2{margin:5px 0 5px;font-size:clamp(25px,4vw,38px);letter-spacing:-.04em}.hero p{margin:0;color:var(--muted);font-size:14px}.controls{flex-wrap:wrap;display:flex;align-items:center;gap:8px}.controls label{color:var(--muted);font-size:13px}\n    .notice{padding:28px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--muted);text-align:center}.notice strong{display:block;margin-bottom:5px;color:var(--text);font-size:17px}.notice a{color:#5eead4}\n    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}.metric{padding:18px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(180deg,rgba(17,31,50,.96),rgba(11,24,40,.97))}.metric-label{color:var(--muted);font-size:11px;font-weight:750;letter-spacing:.09em;text-transform:uppercase}.metric-value{margin-top:4px;font-size:25px;font-weight:780;letter-spacing:-.03em}.metric-note{margin-top:2px;color:var(--muted);font-size:12px}\n    .questions{display:grid;gap:12px}.question{display:grid;grid-template-columns:110px minmax(150px,1fr) minmax(280px,2.1fr);gap:22px;align-items:center;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,rgba(16,31,50,.96),rgba(11,24,40,.97))}.q-title{font-size:17px;font-weight:760}.answer{margin-top:5px;color:var(--muted);font-size:12px}.answer strong{color:#5eead4}.rate{display:flex;align-items:baseline;gap:8px}.rate-number{font-size:27px;font-weight:800;letter-spacing:-.04em}.rate-count{color:var(--muted);font-size:12px}.track{height:7px;margin-top:8px;overflow:hidden;border-radius:999px;background:rgba(148,163,184,.13)}.track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#14b8a6,#5eead4)}\n    .choices{display:grid;grid-template-columns:repeat(6,minmax(38px,1fr));gap:7px}.choice{min-width:0;padding:8px 6px;border:1px solid var(--line);border-radius:9px;background:rgba(3,10,20,.35);text-align:center}.choice.correct{border-color:rgba(74,222,128,.42);background:rgba(74,222,128,.08)}.choice-label{display:block;color:var(--muted);font-size:10px;font-weight:750}.choice.correct .choice-label{color:var(--good)}.choice-value{display:block;margin-top:2px;font-size:14px;font-weight:760}.choice-percent{display:block;color:var(--muted);font-size:9px}.question.needs-key .track span{background:var(--blank)}\n    @media(max-width:800px){.metrics{grid-template-columns:repeat(2,1fr)}.question{grid-template-columns:90px 1fr}.choices{grid-column:1/-1}.hero{align-items:flex-start;flex-direction:column}.controls{width:100%;justify-content:space-between}}\n    @media(max-width:520px){.header-inner{padding:12px 0;align-items:flex-start;flex-direction:column}.actions{width:100%}.actions a{flex:1;text-align:center}.metrics{grid-template-columns:1fr 1fr}.question{grid-template-columns:1fr;gap:12px}.choices{grid-column:auto;grid-template-columns:repeat(3,1fr)}main{padding-top:24px}}\n    @media print{body{background:#fff;color:#111}header,.controls{display:none}.hero p,.metric-note,.rate-count,.answer,.choice-label,.choice-percent{color:#555}.metric,.question,.choice{background:#fff;border-color:#ccc}.questions{gap:8px}main{width:100%;padding:0}.question{break-inside:avoid}.track{border:1px solid #aaa}}\n  \n    #compactPrintSummary { display:none; }\n    @page { size:A4 portrait; margin:10mm; }\n    @media print {\n      html, body { margin:0 !important; padding:0 !important; min-height:0 !important; }\n      body.compact-summary-print > header, body.compact-summary-print > main { display:none !important; }\n      body.compact-summary-print #compactPrintSummary { display:block; color:#111; font-family:Arial,sans-serif; }\n      #compactPrintSummary h1 { font-size:14pt; margin:0 0 3mm; }\n      #compactPrintSummary p { font-size:9pt; margin:0 0 3mm; }\n      #compactPrintSummary table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:7.5pt; }\n      #compactPrintSummary th, #compactPrintSummary td { border:0.2mm solid #bbb; padding:0.6mm 0.3mm; height:5mm; line-height:1.1; text-align:center; white-space:nowrap; }\n      #compactPrintSummary th { background:#eee !important; color:#111; font-size:7pt; }\n      #compactPrintSummary th:first-child { width:7mm; }\n      #compactPrintSummary th:nth-child(2) { width:12mm; }\n      #compactPrintSummary tr { break-inside:avoid; }\n      #compactPrintSummary thead { display:table-header-group; }\n      #compactPrintSummary td.heatmap { background-color:var(--heatmap-color) !important; color:#111 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }\n      #compactPrintSummary td.key-option { font-weight:700; }\n      #compactPrintSummary .print-note { margin-top:2mm; font-size:7pt; }\n    }\n\u003c/style>\n\u003cstyle>body{background:#0b1828}header{position:static}main{padding-top:16px}.header-inner,main{width:calc(100% - 24px)}.table-shell{max-height:65vh}.hero h2{font-size:24px}\u003c/style>\u003cstyle>\n    @media screen {\n      .hero { margin-bottom:16px; align-items:center; }\n      .hero h2 { font-size:26px; letter-spacing:-.03em; }\n      .metrics { gap:10px; margin-bottom:16px; }\n      .metric { padding:14px 16px; box-shadow:none; }\n      .metric-value { font-size:28px; font-variant-numeric:tabular-nums; }\n      .questions { gap:8px; }\n      .question { grid-template-columns:90px minmax(125px,.8fr) minmax(300px,2fr); padding:14px 16px; gap:16px; border-radius:12px; }\n      .q-title { font-size:15px; }\n      .rate-number { font-size:24px; font-variant-numeric:tabular-nums; }\n      .rate { flex-wrap:wrap; gap:3px 8px; }\n      .choices { grid-template-columns:repeat(7,minmax(32px,1fr)); gap:5px; }\n      .choice { padding:7px 3px; border-radius:7px; }\n      .choice-value { font-variant-numeric:tabular-nums; }\n      .choice.correct { border-color:#2dd4bf; background:rgba(45,212,191,.14); }\n      .analysis-legend { color:var(--muted); font-size:12px; margin:0 0 12px; }\n      .analysis-legend strong { color:#5eead4; font-weight:600; }\n    }\n    @media screen and (max-width:800px) { .question { grid-template-columns:90px 1fr; } .choices { grid-column:1/-1; } }\n    @media screen and (max-width:440px) { .choices { grid-template-columns:repeat(4,1fr); } .hero h2 { font-size:22px; } }\n    @media print { .analysis-legend { display:none; } }\n\u003c/style>\u003c/head>\n\u003cbody>\n\u003cheader>\u003cdiv class=\"header-inner\">\u003ch1>Class analysis\u003c/h1>\u003cbutton id=\"printButton\" type=\"button\">Print A4 / Save PDF\u003c/button>\u003c/div>\u003c/header>\n\u003cmain>\u003ch2 id=\"examPaperTitle\" hidden>\u003c/h2>\u003cdiv class=\"hero\">\u003cdiv>\u003cdiv class=\"eyebrow\">Class analysis\u003c/div>\u003ch2>Class overall performance\u003c/h2>\u003cp>Classes are the first two characters of each student index number.\u003c/p>\u003c/div>\u003c/div>\n\u003cdiv id=\"content\" aria-live=\"polite\">\u003c/div>\u003c/main>\n\u003cstyle>\n.table-shell{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:12px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}th{color:var(--muted)}\n.chart{padding:20px;border:1px solid var(--line);border-radius:15px;margin:20px 0;background:var(--card);break-inside:avoid}.chart h3{margin-top:0}.histogram-scroll{overflow-x:auto}.histogram{display:block;width:100%;height:auto;color:var(--text)}.histogram text{fill:currentColor;font-size:12px;font-family:inherit}.histogram .grid{stroke:var(--line)}.histogram .axis{stroke:var(--muted)}.histogram .bar{fill:#2dd4bf}.note{color:var(--muted);font-size:13px}\n@media(max-width:440px){.chart{padding:12px}}\n@media print{.chart{background:white;border-color:#ccc;padding:10px}.histogram{min-width:0!important;color:#111}.histogram .grid{stroke:#ddd}.histogram .bar{fill:#159f90;-webkit-print-color-adjust:exact;print-color-adjust:exact}.note,th{color:#555}tr{break-inside:avoid}.histogram-scroll{overflow:visible}}\n\u003c/style>\n\u003cscript>\nconst content=document.getElementById(\"content\");\nfunction readJSON(key){try{const value=JSON.parse(localStorage.getItem(key));return Array.isArray(value)?value:[]}catch{return []}}\nfunction escapeHTML(value){return String(value).replace(/[&\u003c>\"']/g,c=>({'&':'&amp;','\u003c':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}\nfunction normalizeAnswer(value){return [...new Set(String(value||\"\").toUpperCase().match(/[A-E]/g)||[])].sort().join(\"+\")}\nfunction classStats(raw,key){\n const normalizedKey=key.map(value=>String(value).trim().toUpperCase()===\"X\"?\"\":normalizeAnswer(value)),maximum=normalizedKey.filter(Boolean).length,groups=new Map();\n for(const line of raw){const cells=String(line).split(\";\"),name=cells.slice(1,5).join(\"\").trim().toUpperCase().slice(0,2)||\"Unknown\",answers=cells.slice(5).map(normalizeAnswer);\n const marks=normalizedKey.reduce((sum,answer,i)=>sum+(answer&&answers[i]===answer?1:0),0);\n if(!groups.has(name))groups.set(name,{name,count:0,total:0,frequencies:Array(maximum+1).fill(0)});const group=groups.get(name);group.count++;group.total+=marks;group.frequencies[marks]++;\n }\n return {maximum,groups:[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(group=>({...group,average:maximum?group.total/group.count:null}))};\n}\nfunction renderHistogram(group,maximum,peak){\n const width=Math.max(640,(maximum+1)*28+80),height=320,left=54,right=20,top=28,bottom=58,plotWidth=width-left-right,plotHeight=height-top-bottom;\n const step=Math.max(1,Math.ceil(peak/5)),ceiling=Math.ceil(peak/step)*step,binWidth=plotWidth/(maximum+1);\n const ticks=Array.from({length:ceiling/step+1},(_,i)=>i*step).map(count=>{const y=top+plotHeight-count/ceiling*plotHeight;return `\u003cline class=\"grid\" x1=\"${left}\" x2=\"${width-right}\" y1=\"${y}\" y2=\"${y}\"/>\u003ctext x=\"${left-9}\" y=\"${y+4}\" text-anchor=\"end\">${count}\u003c/text>`}).join('');\n const bars=group.frequencies.map((count,mark)=>{const x=left+mark*binWidth,barHeight=count/ceiling*plotHeight,y=top+plotHeight-barHeight;return `\u003cg>\u003ctitle>${mark} marks: ${count} ${count===1?'student':'students'}\u003c/title>\u003crect class=\"bar\" x=\"${x+1}\" y=\"${y}\" width=\"${binWidth-2}\" height=\"${barHeight}\"/>\u003ctext x=\"${x+binWidth/2}\" y=\"${y-6}\" text-anchor=\"middle\">${count}\u003c/text>\u003ctext x=\"${x+binWidth/2}\" y=\"${top+plotHeight+20}\" text-anchor=\"middle\">${mark}\u003c/text>\u003c/g>`}).join('');\n return `\u003csection class=\"chart\">\u003ch3>Class ${escapeHTML(group.name)} \u2014 marks distribution\u003c/h3>\u003cp class=\"note\">${group.count} students \u00b7 Average: ${group.average.toFixed(2)} / ${maximum} \u00b7 One bar per mark; all classes use the same axes.\u003c/p>\u003cdiv class=\"histogram-scroll\">\u003csvg class=\"histogram\" style=\"min-width:${width}px\" viewBox=\"0 0 ${width} ${height}\" role=\"img\" aria-label=\"${escapeHTML('Class '+group.name+'. Number of students for each mark: '+group.frequencies.map((count,mark)=>mark+' marks: '+count).join('; '))}\">${ticks}\u003cline class=\"axis\" x1=\"${left}\" x2=\"${left}\" y1=\"${top}\" y2=\"${top+plotHeight}\"/>\u003cline class=\"axis\" x1=\"${left}\" x2=\"${width-right}\" y1=\"${top+plotHeight}\" y2=\"${top+plotHeight}\"/>${bars}\u003ctext x=\"${left+plotWidth/2}\" y=\"${height-10}\" text-anchor=\"middle\">Marks (out of ${maximum})\u003c/text>\u003ctext transform=\"translate(15 ${top+plotHeight/2}) rotate(-90)\" text-anchor=\"middle\">Number of students\u003c/text>\u003c/svg>\u003c/div>\u003c/section>`;\n}\nfunction loadData(){\n const title=document.getElementById(\"examPaperTitle\");title.textContent=localStorage.getItem(\"oms2.examTitle\")||\"\";title.hidden=!title.textContent.trim();\n const raw=readJSON(\"oms2.results\"),{maximum,groups}=classStats(raw,readJSON(\"oms2.answerKey\"));\n if(!raw.length){content.innerHTML='\u003cdiv class=\"notice\">\u003cstrong>No results yet\u003c/strong>Process answer sheets in the scanner above to compare classes.\u003c/div>';return}\n const average=maximum?groups.reduce((sum,g)=>sum+g.total,0)/raw.length:null;\n const score=value=>value===null?\"\u2014\":value.toFixed(2);\n const metric=(label,value,note)=>`\u003cdiv class=\"metric\">\u003cdiv class=\"metric-label\">${label}\u003c/div>\u003cdiv class=\"metric-value\">${value}\u003c/div>\u003cdiv class=\"metric-note\">${note}\u003c/div>\u003c/div>`;\n content.innerHTML='\u003csection class=\"metrics\">'+metric('Classes',groups.length,'From student indices')+metric('Students',raw.length,'Stored answer sheets')+metric('Average marks',score(average),maximum?`Out of ${maximum}`:'No scored questions')+metric('Average score',average===null?'\u2014':(average/maximum*100).toFixed(1)+'%','Across all students')+'\u003c/section>'+\n (maximum?'':'\u003cdiv class=\"notice\">\u003cstrong>No scored questions\u003c/strong>Class sizes are shown below. Average scores and the chart require at least one non-voided keyed question.\u003c/div>')+\n '\u003cp class=\"note\">Each correct keyed answer earns 1 mark. Blank or incorrect answers earn 0; voided questions (X) and questions without an answer key are excluded from scores and the maximum mark.\u003c/p>'+\n (maximum?groups.map(g=>renderHistogram(g,maximum,Math.max(1,...groups.flatMap(group=>group.frequencies)))).join(''):'')+\n `\u003cdiv class=\"table-shell\">\u003ctable>\u003ccaption>Class performance summary\u003c/caption>\u003cthead>\u003ctr>\u003cth scope=\"col\">Class\u003c/th>\u003cth scope=\"col\">Students\u003c/th>\u003cth scope=\"col\">Average marks${maximum?` / ${maximum}`:''}\u003c/th>\u003cth scope=\"col\">Average score\u003c/th>\u003c/tr>\u003c/thead>\u003ctbody>${groups.map(g=>`\u003ctr>\u003cth scope=\"row\">${escapeHTML(g.name)}\u003c/th>\u003ctd>${g.count}\u003c/td>\u003ctd>${score(g.average)}\u003c/td>\u003ctd>${g.average===null?'\u2014':(g.average/maximum*100).toFixed(1)+'%'}\u003c/td>\u003c/tr>`).join('')}\u003c/tbody>\u003c/table>\u003c/div>`;\n}\nwindow.addEventListener(\"storage\",loadData);document.getElementById(\"printButton\").addEventListener(\"click\",()=>window.print());loadData();\n\u003c/script>\u003c/body>\u003c/html>";
+
+// Mount once: the embedded applications refresh through shared storage events.
+// Replacing srcdoc on every save would discard unsaved edits and view state.
+function fitIntegratedSummary() {
+  const frame = document.getElementById("integratedSummary");
+  if (!frame || frame.hidden || !frame.contentDocument?.body) return;
+  const height = Math.ceil(frame.contentDocument.body.getBoundingClientRect().height) + 2;
+  const next = `${Math.max(100, height)}px`;
+  if (frame.style.height !== next) frame.style.height = next;
+}
+function enableSummaryAutoHeight(frame) {
+  const doc = frame.contentDocument;
+  if (!doc?.body) return;
+  // Avoid viewport-dependent minimum heights feeding back into frame sizing.
+  const style = doc.createElement("style");
+  style.textContent = "@media screen { html, body { min-height:0 !important; height:auto !important; } }";
+  doc.head.appendChild(style);
+  frame.summarySizeObserver?.disconnect();
+  frame.summarySizeObserver = new ResizeObserver(() => requestAnimationFrame(fitIntegratedSummary));
+  frame.summarySizeObserver.observe(doc.body);
+  fitIntegratedSummary();
+}
+function renderIntegratedFrames() {
+  const summaryFrame = document.getElementById("integratedSummary");
+  const classFrame = document.getElementById("integratedClasses");
+  if (classFrame && !classFrame.hasAttribute("srcdoc")) classFrame.srcdoc = CLASS_DOCUMENT;
+  const editorFrame = document.getElementById("integratedEditor");
+  if (summaryFrame && !summaryFrame.hasAttribute("srcdoc")) {
+    summaryFrame.addEventListener("load", () => enableSummaryAutoHeight(summaryFrame));
+    summaryFrame.srcdoc = SUMMARY_DOCUMENT;
+  }
+  if (editorFrame && !editorFrame.hasAttribute("srcdoc")) editorFrame.srcdoc = EDITOR_DOCUMENT;
+}
+
+function syncIntegratedReview(readStorage = true) {
+  if (readStorage) {
+    loadStoredResults();
+    try {
+      const key = JSON.parse(localStorage.getItem(LS_ANSWER_KEY) || "null");
+      savedAnswerKey = Array.isArray(key) ? key : null;
+      document.getElementById("ansPaste").value = savedAnswerKey ? savedAnswerKey.join(" ") : "";
+      if (savedAnswerKey?.length) document.getElementById("mcqCount").value = savedAnswerKey.length;
+      document.getElementById("keyStatus").textContent = savedAnswerKey ? `Saved ${savedAnswerKey.filter(Boolean).length}/${savedAnswerKey.length}` : "Not saved";
+    } catch (error) { console.warn("Could not restore answer key", error); }
+  }
+  const byTag = new Map(results.map(line => { const cells = line.split(";"); return [cells[0], cells]; }));
+  for (let p = 1; p < pageSummaries.length; p++) {
+    const meta = pageSummaries[p];
+    if (!meta) continue;
+    const cells = byTag.get(meta.pageTag);
+    if (!cells) { delete pageSummaries[p]; continue; }
+    const updatedIndex = cells.slice(1, 5).join("");
+    if (meta.originalIndex !== undefined) meta.correctedIndex = updatedIndex !== meta.originalIndex ? updatedIndex : "";
+    meta.idFromSheet = updatedIndex;
+    idOverrides.delete(meta.pageTag);
+    meta.finalAnswers = cells.slice(5);
+    meta.marks = 0; meta.denom = 0;
+    meta.symbols = meta.finalAnswers.map((answer, i) => {
+      const key = savedAnswerKey?.[i];
+      if (key === "X") return "X";
+      if (!key) return "-";
+      meta.denom++;
+      if (answer === key) { meta.marks++; return "✓"; }
+      return "✗";
+    });
+    meta.pct = meta.denom ? (meta.marks / meta.denom * 100).toFixed(1) : "N/A";
+  }
+  recomputeIssues();
+  renderSummaryForPage(currentPage);
+  renderPreview();
+  renderIntegratedFrames();
+}
+function showIntegratedResults(view) {
+  for (const [name,frame,button] of [["editor","integratedEditor","showResultsEditor"],["summary","integratedSummary","showQuestionSummary"],["classes","integratedClasses","showClassSummary"]]) {
+    document.getElementById(frame).hidden = view !== name;
+    document.getElementById(button).setAttribute("aria-pressed", String(view === name));
+  }
+  if (view === "summary") requestAnimationFrame(fitIntegratedSummary);
+}
+document.addEventListener("DOMContentLoaded", () => {
+  renderIntegratedFrames();
+  document.getElementById("downloadItemAnalysis").onclick = () => {
+    showIntegratedResults("summary");
+    const button = document.getElementById("integratedSummary").contentDocument?.getElementById("printButton");
+    if (!results.length) { setStatus("Process student sheets before saving item analysis."); return; }
+    if (!button) { setStatus("Item analysis is loading. Please try again."); return; }
+    button.click();
+  };
+  document.getElementById("downloadStudentEntries").onclick = () => {
+    showIntegratedResults("editor");
+    const button = document.getElementById("integratedEditor").contentDocument?.getElementById("export");
+    if (!button || button.disabled) { setStatus("Student entries are loading or empty. Process sheets and try again."); return; }
+    button.click();
+    document.getElementById("resultsSection").scrollIntoView({behavior:"smooth"});
+  };
+  document.getElementById("showClassSummary").onclick = () => showIntegratedResults("classes");
+  document.getElementById("showResultsEditor").onclick = () => showIntegratedResults("editor");
+  document.getElementById("showQuestionSummary").onclick = () => showIntegratedResults("summary");
+  document.getElementById("viewEntriesInline").onclick = () => {
+    showIntegratedResults("editor");
+    document.getElementById("resultsSection").scrollIntoView({behavior:"smooth"});
+  };
+  syncIntegratedReview();
+});
+window.addEventListener("storage", event => {
+  if (event.key === LS_EXAM_TITLE || event.key === null) {
+    examTitle = localStorage.getItem(LS_EXAM_TITLE) || "";
+    refreshExamTitle();
+  }
+  if ([LS_RESULTS_KEY, LS_ANSWER_KEY].includes(event.key)) syncIntegratedReview();
+});
+</script>
+
+
+<footer class="app-credit"><span>By Tan Seng Kwang &amp; Melvyn Lee, Temasek Junior College</span><span>2026 version</span></footer>
+<span id="PING_IFRAME_FORM_DETECTION" style="display: none;"></span></body></html>

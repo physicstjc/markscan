@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OMS Calibration — Template Editor</title>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+</script>
+<!-- OpenCV.js -->
+<script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js"></script>
+
+<style>
+  :root{--bg:#0b0f1e;--card:#0e152b;--muted:#94a3b8}
+  body{margin:0;padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:#e5e7eb}
+  h1{margin:0 0 12px;font-size:20px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px}
+  .small{font-size:12px;color:var(--muted)}
+  button,input,select{font-size:14px}
+  button{border:1px solid rgba(255,255,255,.2);background:#111827;color:#e5e7eb;border-radius:8px;padding:7px 12px;cursor:pointer}
+  button.primary{background:linear-gradient(180deg,#1f2937,#0e152b)}
+  label{user-select:none}
+  .pill{padding:3px 8px;border:1px solid rgba(255,255,255,.15);border-radius:999px}
+  .grid{display:grid;grid-template-columns: 1fr 1fr; gap:8px}
+  .viewer{display:flex;flex-direction:column;align-items:center}
+  #canvas{max-width:95%;height:auto;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:#050814}
+  .handle{width:10px;height:10px;border-radius:50%}
+  .controls label{display:flex;align-items:center;gap:6px}
+  textarea{width:100%;min-height:120px;background:#0a0f1e;color:#cbd5e1;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px}
+  a{color:#22d3ee}
+</style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-FSRBCRECMR"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-FSRBCRECMR');
+  </script>
+</head>
+<body>
+<h1>OMS Calibration — Template Editor</h1>
+<div class="row">
+  <div class="card" style="flex: 1 1 380px; min-width: 340px">
+    <div class="grid">
+      <!-- Input section markup -->
+      <div>
+        <!-- Input section -->
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="filePdf" type="file" accept="application/pdf" />
+          <!-- REMOVED: image input, PDF-only calibration -->
+          <!-- <input id="fileImg" type="file" accept="image/*" /> -->
+        </div>
+        <div class="small" style="margin-top:6px">Upload a PDF (preferred) or an image. The page will auto-rectify using the four corner squares.</div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center">
+          <button id="prevBtn">⬅ Prev</button>
+          <span class="small">Page <span id="pageNum">0</span> / <span id="pageCount">0</span></span>
+          <button id="nextBtn">Next ➡</button>
+          <span class="small" id="status" style="margin-left:auto">No input loaded</span>
+        </div>
+      </div>
+      <div>
+        <strong>Template</strong>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="btnLoadLocal">Load from Local</button>
+          <button id="btnSaveLocal" class="primary">Save to Local</button>
+          <button id="btnExport">Export JSON</button>
+          <button id="btnImport">Import JSON</button>
+          <a href="scanner.html" style="margin-left:auto" class="small">Back to Scanner ➜</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px">
+      <strong>Block Controls</strong>
+      <div class="controls" style="margin-top:8px;display:grid;grid-template-columns: repeat(3, 1fr); gap:8px">
+        <div>
+          <label><input type="radio" name="blk" value="index" checked> Index</label>
+          <label>Rows <input id="idxRows" type="number" min="1" max="64" value="4"></label>
+          <label>Cols <input id="idxCols" type="number" min="1" max="64" value="16"></label>
+        </div>
+        <div>
+          <label><input type="radio" name="blk" value="mcq0"> MCQ 1</label>
+          <label>Rows <input id="mcq0Rows" type="number" min="1" max="64" value="15"></label>
+          <label>Cols <input id="mcq0Cols" type="number" min="1" max="8" value="4"></label>
+        </div>
+        <div>
+          <label><input type="radio" name="blk" value="mcq1"> MCQ 2</label>
+          <label>Rows <input id="mcq1Rows" type="number" min="1" max="64" value="15"></label>
+          <label>Cols <input id="mcq1Cols" type="number" min="1" max="8" value="4"></label>
+        </div>
+        <div>
+          <label><input type="radio" name="blk" value="mcq2"> MCQ 3</label>
+          <label>Rows <input id="mcq2Rows" type="number" min="1" max="64" value="15"></label>
+          <label>Cols <input id="mcq2Cols" type="number" min="1" max="8" value="4"></label>
+        </div>
+        <div>
+          <label>Crop Top <input id="cropTop" type="number" step="0.005" min="0" max="0.5" value="0.08"></label>
+          <label>Crop Bottom <input id="cropBottom" type="number" step="0.005" min="0" max="0.5" value="0.08"></label>
+        </div>
+        <div>
+          <label>Crop Left <input id="cropLeft" type="number" step="0.005" min="0" max="0.5" value="0.04"></label>
+          <label>Crop Right <input id="cropRight" type="number" step="0.005" min="0" max="0.5" value="0.04"></label>
+        </div>
+        <div>
+          <label>InnerR (Idx) <input id="idxInnerR" type="number" step="0.01" min="0.1" max="1.0" value="0.30"></label>
+          <label>RingWeight <input id="ringWeight" type="number" step="0.05" min="0.1" max="2.0" value="0.72"></label>
+          <label>RingFactor <input id="ringFactor" type="number" step="0.05" min="1.1" max="3.0" value="1.7"></label>
+        </div>
+        <div>
+          <label>InnerR (MCQ) <input id="mcqInnerR" type="number" step="0.01" min="0.1" max="1.0" value="0.32"></label>
+          <label><input type="checkbox" id="showGrid" checked> Show Grid</label>
+          <label><input type="checkbox" id="showOutline" checked> Show Outlines</label>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px">
+      <strong>Template JSON</strong>
+      <textarea id="templateJson" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <div class="card" style="flex: 2 1 720px; min-width: 480px">
+    <div class="viewer">
+      <canvas id="canvas" width="700" height="990"></canvas>
+    </div>
+    <div class="small" style="margin-top:8px">Drag the 4 corners of each block to match the printed grid. Rows/Cols and Crop margins control the internal grid lines.</div>
+  </div>
+</div>
+
+<script>
+const FID_W = 2100, FID_H = 2970;
+let PDF = null, currentPage = 1, cvReady = false;
+
+
+const DEFAULT_TEMPLATE = {
+  "fiducial_frame": {
+    "width": 2100,
+    "height": 2970
+  },
+  "index": {
+    "top": 0.268,
+    "left": 0.3671,
+    "width": 0.6295,
+    "height": 0.1502,
+    "rows": 4,
+    "cols": 16,
+    "innerR": 0.3,
+    "corners": [
+      {
+        "x": 0.36619046892438617,
+        "y": 0.2717171717171717
+      },
+      {
+        "x": 1,
+        "y": 0.27239057752821183
+      },
+      {
+        "x": 1,
+        "y": 0.41986532500295926
+      },
+      {
+        "x": 0.3647618974958147,
+        "y": 0.4222222222222222
+      }
+    ]
+  },
+  "mcq": [
+    {
+      "top": 0.4508,
+      "left": 0.0514,
+      "width": 0.2229,
+      "height": 0.503,
+      "rows": 15,
+      "cols": 4,
+      "innerR": 0.32,
+      "corners": [
+        {
+          "x": 0.0567,
+          "y": 0.4522
+        },
+        {
+          "x": 0.2743,
+          "y": 0.4508
+        },
+        {
+          "x": 0.27476189749581476,
+          "y": 0.9572390623766966
+        },
+        {
+          "x": 0.05761904035295759,
+          "y": 0.9582491633867977
+        }
+      ]
+    },
+    {
+      "top": 0.4522,
+      "left": 0.3943,
+      "width": 0.2181,
+      "height": 0.5054,
+      "rows": 15,
+      "cols": 4,
+      "innerR": 0.32,
+      "corners": [
+        {
+          "x": 0.3962,
+          "y": 0.4545
+        },
+        {
+          "x": 0.6105,
+          "y": 0.4522
+        },
+        {
+          "x": 0.6124,
+          "y": 0.9576
+        },
+        {
+          "x": 0.3943,
+          "y": 0.9576
+        }
+      ]
+    },
+    {
+      "top": 0.4522,
+      "left": 0.7305,
+      "width": 0.22,
+      "height": 0.504,
+      "rows": 15,
+      "cols": 4,
+      "innerR": 0.32,
+      "corners": [
+        {
+          "x": 0.7319047546386719,
+          "y": 0.4521885573261916
+        },
+        {
+          "x": 0.9505,
+          "y": 0.4522
+        },
+        {
+          "x": 0.9519047546386719,
+          "y": 0.9582491633867977
+        },
+        {
+          "x": 0.7333333260672433,
+          "y": 0.9572390623766966
+        }
+      ]
+    }
+  ],
+  "ringWeight": 0.72,
+  "ringFactor": 1.7,
+  "idxAbs": 0.02,
+  "idxGap": 0.012,
+  "idxZ": 1,
+  "mcqAbs": 0.05,
+  "mcqGap": 0.025,
+  "outIndexW": 1600,
+  "outIndexH": 260,
+  "outMCQW": 520,
+  "outMCQH": 900,
+  "crop": {
+    "left": 0,
+    "right": 0,
+    "top": 0,
+    "bottom": 0
+  }
+}
+
+const LS_KEY = "OMS_TEMPLATE_V1";
+
+// State
+let template = JSON.parse(JSON.stringify(DEFAULT_TEMPLATE));
+let warpedMat = null; // cv.Mat in fiducial frame
+let fidCanvas = document.createElement("canvas"); fidCanvas.width=FID_W; fidCanvas.height=FID_H;
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let scaleX = canvas.width / FID_W, scaleY = canvas.height / FID_H;
+
+// Active block selection and dragging
+let activeBlock = "index"; // index | mcq0 | mcq1 | mcq2
+let drag = { block:null, cornerIdx:-1, on:false };
+
+// OpenCV gate
+(function waitCV(){
+  if(typeof cv==="undefined"||!cv.imread){ setTimeout(waitCV,150); return; }
+  cvReady=true;
+  setStatus("Ready. Upload a PDF."); // updated status text
+})();
+
+// UI elements
+const statusEl = document.getElementById("status");
+function setStatus(s){ statusEl.textContent=s; }
+const filePdf = document.getElementById("filePdf");
+
+document.getElementById("prevBtn").onclick = async ()=>{ if(PDF && currentPage>1){ currentPage--; await renderAndWarpCurrent(); } };
+document.getElementById("nextBtn").onclick = async ()=>{ if(PDF && currentPage<PDF.numPages){ currentPage++; await renderAndWarpCurrent(); } };
+document.getElementById("pageNum").textContent = "0";
+document.getElementById("pageCount").textContent = "0";
+
+// Block controls wiring
+const blkRadios = Array.from(document.querySelectorAll('input[name="blk"]'));
+blkRadios.forEach(r=>r.addEventListener("change", ()=>{ activeBlock = r.value; draw(); }));
+
+// Rows/Cols
+function bindInt(id, getter, setter){
+  const el=document.getElementById(id);
+  el.addEventListener("input", ()=>{
+    const v = parseInt(el.value, 10);
+    if(Number.isFinite(v)) setter(v);
+    draw(); syncJson();
+  });
+}
+bindInt("idxRows", ()=>template.index.rows, v=>template.index.rows=v);
+bindInt("idxCols", ()=>template.index.cols, v=>template.index.cols=v);
+bindInt("mcq0Rows", ()=>template.mcq[0].rows, v=>template.mcq[0].rows=v);
+bindInt("mcq0Cols", ()=>template.mcq[0].cols, v=>template.mcq[0].cols=v);
+bindInt("mcq1Rows", ()=>template.mcq[1].rows, v=>template.mcq[1].rows=v);
+bindInt("mcq1Cols", ()=>template.mcq[1].cols, v=>template.mcq[1].cols=v);
+bindInt("mcq2Rows", ()=>template.mcq[2].rows, v=>template.mcq[2].rows=v);
+bindInt("mcq2Cols", ()=>template.mcq[2].cols, v=>template.mcq[2].cols=v);
+
+// Crop & ring controls
+function bindFloat(id, setter){
+  const el=document.getElementById(id);
+  el.addEventListener("input", ()=>{
+    const v = parseFloat(el.value);
+    if(Number.isFinite(v)) setter(v);
+    draw(); syncJson();
+  });
+}
+bindFloat("cropTop",   v=>template.crop.top=v);
+bindFloat("cropBottom",v=>template.crop.bottom=v);
+bindFloat("cropLeft",  v=>template.crop.left=v);
+bindFloat("cropRight", v=>template.crop.right=v);
+bindFloat("idxInnerR", v=>template.index.innerR=v);
+bindFloat("mcqInnerR", v=>template.mcq.forEach(b=>b.innerR=v));
+bindFloat("ringWeight",v=>template.ringWeight=v);
+bindFloat("ringFactor",v=>template.ringFactor=v);
+
+document.getElementById("showGrid").addEventListener("change", draw);
+document.getElementById("showOutline").addEventListener("change", draw);
+
+// Template load/save/export/import
+document.getElementById("btnLoadLocal").onclick = ()=>{
+  try{
+    const s=localStorage.getItem(LS_KEY);
+    if(!s){ alert("No template found in Local Storage."); return; }
+    template=JSON.parse(s);
+    syncControlsFromTemplate();
+    draw(); syncJson();
+  }catch(e){ console.error(e); alert("Failed to load template from Local Storage."); }
+};
+document.getElementById("btnSaveLocal").onclick = ()=>{
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify(template));
+    alert("Saved template to Local Storage.");
+  }catch(e){ console.error(e); alert("Failed to save to Local Storage."); }
+};
+document.getElementById("btnExport").onclick = ()=>{
+  const blob=new Blob([JSON.stringify(template,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="oms_template.json"; a.click();
+  URL.revokeObjectURL(url);
+};
+document.getElementById("btnImport").onclick = ()=>{
+  const s=prompt("Paste template JSON:");
+  if(!s) return;
+  try{
+    const t=JSON.parse(s);
+    template = t;
+    syncControlsFromTemplate();
+    draw(); syncJson();
+  }catch(e){ alert("Invalid JSON."); }
+};
+
+function syncControlsFromTemplate(){
+  document.getElementById("idxRows").value = template.index.rows;
+  document.getElementById("idxCols").value = template.index.cols;
+  document.getElementById("mcq0Rows").value = template.mcq[0].rows;
+  document.getElementById("mcq0Cols").value = template.mcq[0].cols;
+  document.getElementById("mcq1Rows").value = template.mcq[1].rows;
+  document.getElementById("mcq1Cols").value = template.mcq[1].cols;
+  document.getElementById("mcq2Rows").value = template.mcq[2].rows;
+  document.getElementById("mcq2Cols").value = template.mcq[2].cols;
+
+  document.getElementById("cropTop").value    = template.crop.top;
+  document.getElementById("cropBottom").value = template.crop.bottom;
+  document.getElementById("cropLeft").value   = template.crop.left;
+  document.getElementById("cropRight").value  = template.crop.right;
+  document.getElementById("idxInnerR").value  = template.index.innerR;
+  document.getElementById("mcqInnerR").value  = template.mcq[0].innerR;
+  document.getElementById("ringWeight").value = template.ringWeight;
+  document.getElementById("ringFactor").value = template.ringFactor;
+  syncJson();
+}
+
+function syncJson(){
+  document.getElementById("templateJson").value = JSON.stringify(template, null, 2);
+}
+
+// PDF/image input handling
+filePdf.addEventListener("change", async e=>{
+  const f = e.target.files?.[0]; if(!f) return;
+  const isPdfMime = (f.type || "").toLowerCase() === "application/pdf";
+  const isPdfExt  = /\.pdf$/i.test(f.name || "");
+  if (!(isPdfMime || isPdfExt)) {
+    setStatus("Only PDF files are accepted.");
+    alert("Only PDF files are accepted for calibration.");
+    e.target.value = "";
+    return;
+  }
+  setStatus("Loading PDF…");
+  try {
+    const buf = await f.arrayBuffer();
+    PDF = await pdfjsLib.getDocument({ data: buf }).promise;
+    document.getElementById("pageCount").textContent = PDF.numPages;
+    currentPage = 1;
+    await renderAndWarpCurrent();
+    setStatus("PDF loaded.");
+  } catch(err) {
+    console.error(err);
+    setStatus("Failed to load PDF.");
+  }
+});
+
+
+async function renderAndWarpCurrent(){
+  if(!PDF) return;
+  const page=await PDF.getPage(currentPage);
+  document.getElementById("pageNum").textContent=currentPage;
+  const vp=page.getViewport({scale:Math.max(2.6,2.0*devicePixelRatio)});
+  const c=document.createElement("canvas"); c.width=vp.width; c.height=vp.height;
+  await page.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+  await warpFromCanvas(c);
+}
+
+// OpenCV helpers
+function canvasToMat(c){ return cv.imread(c); }
+
+function detectCornerSquares(srcMat){
+  const iw=srcMat.cols, ih=srcMat.rows;
+  let gray=new cv.Mat(), bin=new cv.Mat();
+  cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY, 0);
+  cv.GaussianBlur(gray, gray, new cv.Size(5,5), 0);
+  cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  let contours=new cv.MatVector(), hier=new cv.Mat();
+  cv.findContours(bin, contours, hier, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+  const cand=[];
+  for(let i=0;i<contours.size();i++){
+    const r=cv.boundingRect(contours.get(i));
+    const area=r.width*r.height;
+    if(area<(iw*ih)*0.00002 || area>(iw*ih)*0.01) continue;
+    const ratio=r.width/r.height; if(ratio<0.8||ratio>1.25) continue;
+    const roi=bin.roi(r); const fill=cv.mean(roi)[0]/255; roi.delete();
+    if(fill<0.6) continue;
+    cand.push({ cx:r.x+r.width/2, cy:r.y+r.height/2, rect:r });
+  }
+  contours.delete(); hier.delete(); gray.delete(); bin.delete();
+
+  function pick(tx,ty){
+    let best=null, bestD=1e18, bestIdx=-1;
+    cand.forEach((p,i)=>{ const d=(p.cx-tx)**2+(p.cy-ty)**2; if(d<bestD){ bestD=d; best=p; bestIdx=i; }});
+    if(bestIdx>=0) cand.splice(bestIdx,1);
+    return best;
+  }
+
+  const TL=pick(0,0), TR=pick(iw,0), BR=pick(iw,ih), BL=pick(0,ih);
+  if(!TL||!TR||!BR||!BL) return null;
+
+  return {
+    pTL:{x:TL.rect.x, y:TL.rect.y},
+    pTR:{x:TR.rect.x+TR.rect.width, y:TR.rect.y},
+    pBR:{x:BR.rect.x+BR.rect.width, y:BR.rect.y+BR.rect.height},
+    pBL:{x:BL.rect.x, y:BL.rect.y+BL.rect.height}
+  };
+}
+function edgeFitWarp(src){
+  const c=detectCornerSquares(src);
+  let warped=new cv.Mat();
+  if(!c){
+    cv.resize(src, warped, new cv.Size(FID_W, FID_H));
+    return { warped, invH: null };
+  }
+  const srcPts=cv.matFromArray(4,1,cv.CV_32FC2,new Float32Array([
+    c.pTL.x,c.pTL.y, c.pTR.x,c.pTR.y, c.pBR.x,c.pBR.y, c.pBL.x,c.pBL.y
+  ]));
+  const dstPts=cv.matFromArray(4,1,cv.CV_32FC2,new Float32Array([0,0, FID_W,0, FID_W,FID_H, 0,FID_H]));
+  const H=cv.getPerspectiveTransform(srcPts,dstPts);
+  cv.warpPerspective(src, warped, H, new cv.Size(FID_W,FID_H));
+  srcPts.delete(); dstPts.delete(); H.delete();
+  return { warped, invH: null };
+}
+
+async function warpFromCanvas(cnv){
+  if(!cvReady){ setStatus("Loading OpenCV…"); return; }
+  let src=canvasToMat(cnv);
+  const { warped } = edgeFitWarp(src);
+  src.delete();
+  if(warpedMat) warpedMat.delete();
+  warpedMat = warped;
+  cv.imshow(fidCanvas, warpedMat);
+  draw();
+}
+
+// Drawing: show warped fiducial image and overlay blocks
+function draw(){
+  // draw warped fid image into main canvas (scaled)
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  scaleX = canvas.width / FID_W;
+  scaleY = canvas.height / FID_H;
+  ctx.drawImage(fidCanvas, 0, 0, canvas.width, canvas.height);
+
+  const showGrid = document.getElementById("showGrid").checked;
+  const showOutline = document.getElementById("showOutline").checked;
+
+  // Helper to draw one block (corners in fractions)
+  function drawBlock(block, isActive){
+    const ptsF = block.corners;
+    const pts = ptsF.map(p=>({ x: p.x*FID_W, y: p.y*FID_H }));
+    // outline
+    if(showOutline){
+      ctx.strokeStyle = isActive ? "rgba(0,255,255,0.95)" : "rgba(0,255,255,0.6)";
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x*scaleX, pts[0].y*scaleY);
+      for(let i=1;i<4;i++) ctx.lineTo(pts[i].x*scaleX, pts[i].y*scaleY);
+      ctx.closePath(); ctx.stroke();
+    }
+
+    // grid lines inside (uniform fractions within crop)
+    if(showGrid){
+      const c = template.crop;
+      const rowFracs = Array.from({length:block.rows-1}, (_,i)=>
+        c.top + ((i+1)/block.rows) * (1 - c.top - c.bottom)
+      );
+      const colFracs = Array.from({length:block.cols-1}, (_,i)=>
+        c.left + ((i+1)/block.cols) * (1 - c.left - c.right)
+      );
+
+      ctx.strokeStyle="rgba(0,255,255,0.5)";
+      ctx.lineWidth = 1.25;
+
+      // rows: TL->BL and TR->BR interpolation
+      for(const fRaw of rowFracs){
+        const f = Math.max(0, Math.min(1, fRaw));
+        const lx = pts[0].x + f*(pts[3].x - pts[0].x);
+        const ly = pts[0].y + f*(pts[3].y - pts[0].y);
+        const rx = pts[1].x + f*(pts[2].x - pts[1].x);
+        const ry = pts[1].y + f*(pts[2].y - pts[1].y);
+        ctx.beginPath();
+        ctx.moveTo(lx*scaleX, ly*scaleY);
+        ctx.lineTo(rx*scaleX, ry*scaleY);
+        ctx.stroke();
+      }
+      // cols: TL->TR and BL->BR interpolation
+      for(const gRaw of colFracs){
+        const g = Math.max(0, Math.min(1, gRaw));
+        const tx = pts[0].x + g*(pts[1].x - pts[0].x);
+        const ty = pts[0].y + g*(pts[1].y - pts[0].y);
+        const bx = pts[3].x + g*(pts[2].x - pts[3].x);
+        const by = pts[3].y + g*(pts[2].y - pts[3].y);
+        ctx.beginPath();
+        ctx.moveTo(tx*scaleX, ty*scaleY);
+        ctx.lineTo(bx*scaleX, by*scaleY);
+        ctx.stroke();
+      }
+    }
+
+    // handles (corners)
+    for(let i=0;i<4;i++){
+      const p=pts[i];
+      ctx.fillStyle = isActive ? "#22d3ee" : "#93c5fd";
+      ctx.beginPath();
+      ctx.arc(p.x*scaleX, p.y*scaleY, 5.5, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  drawBlock(template.index, activeBlock==="index");
+  drawBlock(template.mcq[0], activeBlock==="mcq0");
+  drawBlock(template.mcq[1], activeBlock==="mcq1");
+  drawBlock(template.mcq[2], activeBlock==="mcq2");
+}
+
+// Dragging logic
+canvas.addEventListener("mousedown", e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  function hit(blockName, block){
+    const pts = block.corners.map(p=>({ x:p.x*FID_W*scaleX, y:p.y*FID_H*scaleY }));
+    for(let i=0;i<4;i++){
+      const dx=mx-pts[i].x, dy=my-pts[i].y;
+      if(dx*dx+dy*dy <= 10*10){ return i; }
+    }
+    return -1;
+  }
+  let blkObj=null, blkName=activeBlock;
+  if(activeBlock==="index") blkObj=template.index;
+  else if(activeBlock==="mcq0") blkObj=template.mcq[0];
+  else if(activeBlock==="mcq1") blkObj=template.mcq[1];
+  else if(activeBlock==="mcq2") blkObj=template.mcq[2];
+
+  const cornerIdx = hit(blkName, blkObj);
+  if(cornerIdx>=0){
+    drag = { block: blkName, cornerIdx, on:true };
+  }
+});
+canvas.addEventListener("mousemove", e=>{
+  if(!drag.on) return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const fx = (mx/scaleX)/FID_W;
+  const fy = (my/scaleY)/FID_H;
+  function upd(block){
+    block.corners[drag.cornerIdx] = {
+      x: Math.max(0, Math.min(1, fx)),
+      y: Math.max(0, Math.min(1, fy))
+    };
+  }
+  if(drag.block==="index") upd(template.index);
+  else if(drag.block==="mcq0") upd(template.mcq[0]);
+  else if(drag.block==="mcq1") upd(template.mcq[1]);
+  else if(drag.block==="mcq2") upd(template.mcq[2]);
+  draw(); syncJson();
+});
+canvas.addEventListener("mouseup", ()=>{ drag.on=false; });
+canvas.addEventListener("mouseleave", ()=>{ drag.on=false; });
+
+syncControlsFromTemplate();
+draw();
+</script>
+</body>
+</html>
