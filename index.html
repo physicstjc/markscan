@@ -446,6 +446,14 @@ dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1
     <div style="margin-top:8px">
       <strong>Current student summary</strong>
       <pre id="summary" class="log" style="margin-top:6px"></pre>
+      <label for="studentResponses" class="small">Edit this student's responses (Q1 onwards)</label>
+      <input id="studentResponses" type="text" style="display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px" disabled spellcheck="false" aria-describedby="studentResponsesHelp studentResponsesStatus" placeholder="A B C - A+C D …">
+      <div id="studentResponsesHelp" class="small">Separate answers with spaces. Use A–D, - for a blank, or A+C for multiple selections. Include every question in order.</div>
+      <div class="control-group" style="margin:8px 0">
+        <button id="saveStudentResponses" type="button" disabled>Save student responses</button>
+        <button id="resetStudentResponses" type="button" disabled>Discard edits</button>
+        <span id="studentResponsesStatus" class="small" role="status" aria-live="polite"></span>
+      </div>
     </div>
 
     <!-- Student preview area — insert dropdown + two panels -->
@@ -769,6 +777,8 @@ if (btnClearResults) {
     try { localStorage.removeItem(LS_RESULTS_KEY); } catch {}
     results = [];
     pageSummaries = [];
+    studentResponseDrafts.clear();
+    renderStudentResponses(null);
     idOverrides.clear();
     renderPreview();
     outEl.textContent = "";
@@ -1146,8 +1156,22 @@ function computeRowBands(rows, cropRows) {
 /* ===== MCQ decision (multi-select, bottom-half only) ===== */
 function selectMarkedOptions(counts, sampleAreas, thrMul = 1.0) {
   // Judge each option independently: all four options may be shaded.
-  return counts.flatMap((count, index) =>
+  const selected = counts.flatMap((count, index) =>
     count >= Math.max(5, Math.ceil(sampleAreas[index] * 0.5 * thrMul)) ? [index] : []);
+  if (selected.length) return selected;
+
+  // Rasterisation can push lightly shaded bubbles just below the absolute
+  // cutoff. Recover only a single, clearly darker borderline mark; never
+  // choose an option solely because it is the darkest of four empty outlines.
+  const ranked = counts.map((count, index) => ({
+    index, count, density: sampleAreas[index] > 0 ? count / sampleAreas[index] : 0
+  })).sort((a, b) => b.density - a.density);
+  const [best, next] = ranked;
+  if (best && next && best.count >= 5 &&
+      best.density >= 0.45 * thrMul &&
+      best.density - next.density >= 0.12 * thrMul &&
+      best.density >= next.density * 1.35) return [best.index];
+  return [];
 }
 
 function decideMCQMultiInkBottom(bin, rowBands, colCenters, rCount, thrMul = 1.0, centerFrac = 0.75, bottomHalfOnly = true) {
@@ -1911,6 +1935,65 @@ function updateReportActionButtons(){
   });
 }
 
+// Keep drafts attached to their source page when navigating between students.
+const studentResponseDrafts = new Map();
+function parseStudentResponses(text, expectedCount) {
+  const tokens = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (tokens.length !== expectedCount) throw new Error(`Enter exactly ${expectedCount} responses; found ${tokens.length}. Use - for each blank.`);
+  return tokens.map((token, index) => {
+    if (token === "-") return "";
+    if (!/^[A-D](?:\+[A-D])*$/.test(token)) throw new Error(`Q${index + 1}: use A–D, - for blank, or A+C for multiple selections.`);
+    return [...new Set(token.split("+"))].sort().join("+");
+  });
+}
+function renderStudentResponses(meta) {
+  const input = document.getElementById("studentResponses");
+  if (!input) return;
+  input.disabled = !meta;
+  input.dataset.pageTag = meta?.pageTag || "";
+  input.value = meta ? (studentResponseDrafts.get(meta.pageTag) ?? meta.finalAnswers.map(answer => answer || "-").join(" ")) : "";
+  document.getElementById("saveStudentResponses").disabled = !meta;
+  document.getElementById("resetStudentResponses").disabled = !meta;
+  document.getElementById("studentResponsesStatus").textContent = meta
+    ? `${meta.finalAnswers.length} questions${studentResponseDrafts.has(meta.pageTag) ? " · Unsaved edits" : ""}` : "Process this sheet to edit its responses.";
+}
+function saveCurrentStudentResponses() {
+  const input = document.getElementById("studentResponses");
+  const status = document.getElementById("studentResponsesStatus");
+  const meta = pageSummaries[currentPage];
+  if (!meta || input.dataset.pageTag !== meta.pageTag) return;
+  try {
+    const answers = parseStudentResponses(input.value, meta.finalAnswers.length);
+    const matches = results.map((line, index) => line.split(";")[0] === meta.pageTag ? index : -1).filter(index => index >= 0);
+    if (matches.length !== 1) throw new Error("This source page is missing or duplicated in saved results. Resolve it in Edit results before saving.");
+    const updated = results.slice();
+    const cells = updated[matches[0]].split(";");
+    updated[matches[0]] = [...cells.slice(0, 5), ...answers].join(";");
+    localStorage.setItem(LS_RESULTS_KEY, JSON.stringify(updated));
+    results = updated;
+    outEl.textContent = results.join("\n");
+    studentResponseDrafts.delete(meta.pageTag);
+    syncIntegratedReview(false);
+    renderCurrentReportPreview(currentPage);
+    status.textContent = "Saved. Marks, reports and analysis updated.";
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("studentResponses").addEventListener("input", event => {
+    const tag = event.target.dataset.pageTag;
+    if (tag) studentResponseDrafts.set(tag, event.target.value);
+    document.getElementById("studentResponsesStatus").textContent = "Unsaved edits";
+  });
+  document.getElementById("saveStudentResponses").addEventListener("click", saveCurrentStudentResponses);
+  document.getElementById("resetStudentResponses").addEventListener("click", () => {
+    const meta = pageSummaries[currentPage];
+    if (meta) studentResponseDrafts.delete(meta.pageTag);
+    renderStudentResponses(meta);
+  });
+});
+
 function renderSummaryForPage(p){
   const summaryEl = document.getElementById("summary");
   const idInput = document.getElementById("idOverride");
@@ -1918,6 +2001,7 @@ function renderSummaryForPage(p){
   if (!summaryEl) return;
 
   const meta = pageSummaries[p];
+  renderStudentResponses(meta);
   if (!meta) {
     summaryEl.textContent = "No summary for this page.";
     if (idInput) idInput.value = "";
