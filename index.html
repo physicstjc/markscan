@@ -447,8 +447,8 @@ dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1
       <strong>Current student summary</strong>
       <pre id="summary" class="log" style="margin-top:6px"></pre>
       <label for="studentResponses" class="small">Edit this student's responses (Q1 onwards)</label>
-      <input id="studentResponses" type="text" style="display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px" disabled spellcheck="false" aria-describedby="studentResponsesHelp studentResponsesStatus" placeholder="A B C - A+C D …">
-      <div id="studentResponsesHelp" class="small">Separate answers with spaces. Use A–D, - for a blank, or A+C for multiple selections. Include every question in order.</div>
+      <input id="studentResponses" type="text" style="display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px" disabled spellcheck="false" aria-describedby="studentResponsesHelp studentResponsesStatus" placeholder="A;B;C;-;A+C;D">
+      <div id="studentResponsesHelp" class="small">Separate answers with semicolons (;). Use A–D, - or an empty entry for a blank, or A+C for multiple selections. Include every question in order.</div>
       <div class="control-group" style="margin:8px 0">
         <button id="saveStudentResponses" type="button" disabled>Save student responses</button>
         <button id="resetStudentResponses" type="button" disabled>Discard edits</button>
@@ -1938,10 +1938,10 @@ function updateReportActionButtons(){
 // Keep drafts attached to their source page when navigating between students.
 const studentResponseDrafts = new Map();
 function parseStudentResponses(text, expectedCount) {
-  const tokens = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
-  if (tokens.length !== expectedCount) throw new Error(`Enter exactly ${expectedCount} responses; found ${tokens.length}. Use - for each blank.`);
+  const tokens = text.toUpperCase().split(";").map(token => token.trim());
+  if (tokens.length !== expectedCount) throw new Error(`Enter exactly ${expectedCount} semicolon-separated responses; found ${tokens.length}. Use - or an empty entry for each blank.`);
   return tokens.map((token, index) => {
-    if (token === "-") return "";
+    if (token === "-" || token === "") return "";
     if (!/^[A-D](?:\+[A-D])*$/.test(token)) throw new Error(`Q${index + 1}: use A–D, - for blank, or A+C for multiple selections.`);
     return [...new Set(token.split("+"))].sort().join("+");
   });
@@ -1951,7 +1951,7 @@ function renderStudentResponses(meta) {
   if (!input) return;
   input.disabled = !meta;
   input.dataset.pageTag = meta?.pageTag || "";
-  input.value = meta ? (studentResponseDrafts.get(meta.pageTag) ?? meta.finalAnswers.map(answer => answer || "-").join(" ")) : "";
+  input.value = meta ? (studentResponseDrafts.get(meta.pageTag) ?? meta.finalAnswers.map(answer => answer || "-").join(";")) : "";
   document.getElementById("saveStudentResponses").disabled = !meta;
   document.getElementById("resetStudentResponses").disabled = !meta;
   document.getElementById("studentResponsesStatus").textContent = meta
