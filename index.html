@@ -1144,9 +1144,10 @@ function computeRowBands(rows, cropRows) {
 }
 
 /* ===== MCQ decision (multi-select, bottom-half only) ===== */
-function selectMarkedOptions(counts, minInkHard, background, noiseMargin) {
-  const threshold = Math.max(minInkHard, background + noiseMargin);
-  return counts.flatMap((count, index) => count >= threshold ? [index] : []);
+function selectMarkedOptions(counts, sampleAreas, thrMul = 1.0) {
+  // Judge each option independently: all four options may be shaded.
+  return counts.flatMap((count, index) =>
+    count >= Math.max(5, Math.ceil(sampleAreas[index] * 0.5 * thrMul)) ? [index] : []);
 }
 
 function decideMCQMultiInkBottom(bin, rowBands, colCenters, rCount, thrMul = 1.0, centerFrac = 0.75, bottomHalfOnly = true) {
@@ -1159,9 +1160,9 @@ function decideMCQMultiInkBottom(bin, rowBands, colCenters, rCount, thrMul = 1.0
     const clipLow = bottomHalfOnly ? Math.round(yTop + 0.5 * bandH) : Math.max(0, yCenter - rCount);
     const clipHigh = bottomHalfOnly ? yBottom : Math.min(bin.rows - 1, yCenter + rCount);
 
-    const counts = [];
+    const counts = [], sampleAreas = [];
     for (const x0 of colCenters) {
-      let count = 0;
+      let count = 0, sampled = 0;
       const xLow = Math.max(0, Math.floor(x0 - rCount));
       const xHigh = Math.min(bin.cols - 1, Math.ceil(x0 + rCount));
       for (let yy = clipLow; yy <= clipHigh; yy++) {
@@ -1170,21 +1171,20 @@ function decideMCQMultiInkBottom(bin, rowBands, colCenters, rCount, thrMul = 1.0
         for (let xx = xLow; xx <= xHigh; xx++) {
           const dx = xx - x0;
           if (dx*dx + dy*dy <= rCount*rCount) {
+            sampled++;
             if (ptr[xx] > 0) count++;
           }
         }
       }
       counts.push(count);
+      sampleAreas.push(sampled);
     }
 
-    const area = Math.PI * rCount * rCount * (bottomHalfOnly ? 0.6 : 1.0);
-    const minInkSoft = Math.max(5, Math.round(area * 0.20 * thrMul));
-    const minInkHard = Math.max(minInkSoft + Math.round(area * 0.08), Math.round(area * 0.28 * thrMul));
-    // Use the least-inked option as the background reference. A median
-    // reference rises into the shaded group when 2–3 options are selected.
-    const background = Math.min(...counts);
-    const noiseMargin = Math.round(area * (bottomHalfOnly ? 0.12 : 0.10) * thrMul);
-    const finalIdxs = selectMarkedOptions(counts, minInkHard, background, noiseMargin);
+    // Count the actual sampled pixels. The bubble centre is in the lower
+    // half of the row, but its sampling circle is usually entirely inside it.
+    // A fractional "half-circle" area underestimated the threshold, allowing
+    // printed outlines to count as selections. Require at least 50% ink.
+    const finalIdxs = selectMarkedOptions(counts, sampleAreas, thrMul);
     rowsOut.push(finalIdxs.length ? finalIdxs.map(i => ABCD[i]).join("+") : "");
   }
   return rowsOut;
