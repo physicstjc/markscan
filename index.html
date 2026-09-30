@@ -568,11 +568,12 @@ const TEMPLATE = {
   "index": {
     "top": 0.268, "left": 0.3671, "width": 0.6295, "height": 0.1502,
     "rows": 4, "cols": 16, "innerR": 0.3,
+    // Index bubble centers calibrated against all 30 pages of 0588_001.pdf.
     "corners": [
-      {"x":0.3671,"y":0.268},
-      {"x":0.9967,"y":0.268},
-      {"x":0.998891339983259,"y":0.42255891742128315},
-      {"x":0.3688913399832589,"y":0.42356901843138417}
+      {"x":0.367214,"y":0.273403},
+      {"x":1.002959,"y":0.273782},
+      {"x":1.002496,"y":0.422457},
+      {"x":0.367242,"y":0.422384}
     ]
   },
   "mcq": [
@@ -1188,7 +1189,7 @@ function buildIndexLocations(invH, srcW, srcH) {
   const cw=TEMPLATE.outIndexW/TEMPLATE.index.cols,rh=TEMPLATE.outIndexH/TEMPLATE.index.rows;
   return Array.from({length:4},(_,row)=>DIGITS16.map((_,col)=>Array.from({length:40},(_,i)=>{
     const angle=i*Math.PI*2/40;
-    const [x,y]=project(h,(col+.5)*cw+Math.cos(angle)*cw*.221,(row + (row === 3 ? .50 : row === 2 ? .60 : .70))*rh+Math.sin(angle)*rh*.156);
+    const [x,y]=project(h,(col+.5)*cw+Math.cos(angle)*cw*.221,Math.round((row+.5)*rh)+Math.sin(angle)*rh*.156);
     const [sx,sy]=inverse?project(inverse,x,y):[x*srcW/FID_W,y*srcH/FID_H];return[sx/srcW,sy/srcH];
   })));
 }
@@ -2654,6 +2655,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showIndexError("Enter a four-character student index, such as 2E05.");
         return;
       }
+      if (!confirmDuplicateIdOverride(pageTag, candidate)) return;
       const displaced = invalidateDuplicateIds(pageTag, candidate);
       if (val) idOverrides.set(pageTag, val);
       else idOverrides.delete(pageTag);
@@ -2688,6 +2690,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 });
+
+function confirmDuplicateIdOverride(pageTag, candidate) {
+  const duplicates = results.flatMap((line, position) => {
+    const cells = line.split(";");
+    const id = (idOverrides.get(cells[0]) || cells.slice(1, 5).join("")).trim().toUpperCase();
+    return cells[0] !== pageTag && id === candidate
+      ? [`${cells[0]} (result ${position + 1})`] : [];
+  });
+  if (!duplicates.length) return true;
+  return window.confirm(
+    `Duplicate student ID: ${candidate}\n\n` +
+    `Keep this ID on: ${pageTag}\n\n` +
+    `Already used by:\n${duplicates.map(tag => "• " + tag).join("\n")}\n\n` +
+    `Confirm to give ${candidate} to ${pageTag} and invalidate the other listed entries. ` +
+    `Their answers and scores will be preserved, and they will be flagged for manual checking.\n\n` +
+    `Cancel to leave all entries unchanged.`
+  );
+}
 
 // Keep the displaced ID in the result itself so manual-check issues survive
 // reloads and edits. The leading ! makes it invalid for student lookup.
