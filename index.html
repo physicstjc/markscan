@@ -585,7 +585,8 @@ const TEMPLATE = {
     {
       "top":0.4522,"left":0.3943,"width":0.2181,"height":0.5054,
       "rows":15,"cols":4,"innerR":0.32,
-      "corners":[{"x":0.3962,"y":0.4545},{"x":0.6105,"y":0.4522},{"x":0.6124,"y":0.9576},{"x":0.3943,"y":0.9576}]
+      // Calibrated against all 30 pages of 0588_001.pdf; corrects drift at Q28-Q30.
+      "corners":[{"x":0.397336,"y":0.450727},{"x":0.613723,"y":0.450375},{"x":0.614353,"y":0.955318},{"x":0.397749,"y":0.9551}]
     },
     {
       "top":0.4522,"left":0.7305,"width":0.22,"height":0.504,
@@ -2168,7 +2169,8 @@ function renderSummaryForPage(p){
 
   const useId = (override || meta.idFromSheet || "").toUpperCase();
   const stu = useId ? (studentMap.get(useId) || null) : null;
-  const info = stu ? `${stu.id} ${stu.name} (${stu.cls})`
+  const info = /^![A-Z0-9]{4}$/.test(useId) ? `ID ${useId.slice(1)} invalid — Manual checking required`
+                   : stu ? `${stu.id} ${stu.name} (${stu.cls})`
                    : (useId ? `${useId} (not found)` : "ID: N/A");
   if (resolvedEl) resolvedEl.textContent = info;
 
@@ -2640,7 +2642,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnApplyId) {
     btnApplyId.addEventListener("click", () => {
       const p = currentPage;
-      const val = (document.getElementById("idOverride")?.value || "").trim();
+      const val = (document.getElementById("idOverride")?.value || "").trim().toUpperCase();
       const meta = pageSummaries[p];
       if (!meta) {
         setStatus("No processed data for this page yet.");
@@ -2652,14 +2654,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showIndexError("Enter a four-character student index, such as 2E05.");
         return;
       }
-      const duplicate = results.some(line => {
-        const cells = line.split(";");
-        return cells[0] !== pageTag && cells.slice(1, 5).join("").trim().toUpperCase() === candidate;
-      });
-      if (duplicate) {
-        showIndexError(`Student index ${candidate} is already used by another entry. Each student index must be unique.`);
-        return;
-      }
+      const displaced = invalidateDuplicateIds(pageTag, candidate);
       if (val) idOverrides.set(pageTag, val);
       else idOverrides.delete(pageTag);
 
@@ -2675,7 +2670,9 @@ document.addEventListener("DOMContentLoaded", () => {
       renderCurrentReportPreview(p);
 
       renderPreview();
-      setStatus("Student ID override applied. Corrected index numbers are circled in red on the scanned sheet.");
+      setStatus(displaced
+        ? `Student ID override applied. ${displaced} duplicate entry/entries invalidated and flagged for manual checking.`
+        : "Student ID override applied. Corrected index numbers are circled in red on the scanned sheet.");
     });
   }
   const btnSave = document.getElementById("btnSaveKey");
@@ -2691,6 +2688,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 });
+
+// Keep the displaced ID in the result itself so manual-check issues survive
+// reloads and edits. The leading ! makes it invalid for student lookup.
+function invalidateDuplicateIds(pageTag, candidate) {
+  let displaced = 0;
+  results = results.map(line => {
+    const cells = line.split(";");
+    const id = (idOverrides.get(cells[0]) || cells.slice(1, 5).join("")).trim().toUpperCase();
+    if (cells[0] === pageTag || id !== candidate) return line;
+    displaced++;
+    idOverrides.delete(cells[0]);
+    cells.splice(1, 4, "!" + candidate[0], ...candidate.slice(1));
+    for (const meta of pageSummaries) {
+      if (meta?.pageTag !== cells[0]) continue;
+      meta.idFromSheet = "!" + candidate;
+      meta.correctedIndex = "!" + candidate;
+    }
+    return cells.join(";");
+  });
+  return displaced;
+}
 
 function applyOverrideToResults(pageTag, overrideStr){
   try {
@@ -2732,9 +2750,11 @@ function recomputeIssues() {
       if (!answer.trim()) add(`${prefix}:blank:${i}`, `${entry.tag}: Q${i + 1} — Missing answer`);
       else if (answer.includes("+")) add(`${prefix}:multi:${i}`, `${entry.tag}: Q${i + 1} — Multiple answers (${answer})`);
     });
-    if (!entry.id) add(`${prefix}:id`, `${entry.tag}: Student ID is empty`);
+    if (/^![A-Z0-9]{4}$/.test(entry.id)) {
+      add(`${prefix}:duplicate`, `${entry.tag}: Manual checking required — Duplicate student ID ${entry.id.slice(1)} invalidated by an ID override`);
+    } else if (!entry.id) add(`${prefix}:id`, `${entry.tag}: Student ID is empty`);
     else if (!/^[A-Z0-9]{4}$/.test(entry.id) || (studentMap.size && !studentMap.has(entry.id))) add(`${prefix}:id`, `${entry.tag}: Student ID not found in list: ${entry.id}`);
-    if ((counts.get(entry.id) || 0) > 1) add(`${prefix}:duplicate`, `${entry.tag}: Duplicated student ID: ${entry.id}`);
+    if (!entry.id.startsWith("!") && (counts.get(entry.id) || 0) > 1) add(`${prefix}:duplicate`, `${entry.tag}: Duplicated student ID: ${entry.id}`);
   }
   processingFailures.forEach((message, page) => add(`processing:${page}`, `${page}: ${message}`));
   for (const [key, text] of active) {
