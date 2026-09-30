@@ -579,7 +579,8 @@ const TEMPLATE = {
     {
       "top":0.4508,"left":0.0514,"width":0.2229,"height":0.503,
       "rows":15,"cols":4,"innerR":0.32,
-      "corners":[{"x":0.0567,"y":0.4522},{"x":0.2743,"y":0.4508},{"x":0.2729,"y":0.9539},{"x":0.0514,"y":0.9539}]
+      // Calibrated against all 30 pages of 0588_001.pdf; corrects drift at Q13-Q15.
+      "corners":[{"x":0.056537,"y":0.450588},{"x":0.275601,"y":0.450756},{"x":0.27597,"y":0.954893},{"x":0.05644,"y":0.95557}]
     },
     {
       "top":0.4522,"left":0.3943,"width":0.2181,"height":0.5054,
@@ -1310,17 +1311,17 @@ function selectMarkedOptions(counts, sampleAreas, thrMul = 1.0) {
   if (selected.length) return selected;
 
   // Rasterisation can push lightly shaded bubbles just below the absolute
-  // cutoff. Recover only a single mark with at least 50% coverage and
-  // a strong lead over the next bubble (18 percentage points and 1.5x); never
+  // cutoff. Recover only a single mark with at least 45% coverage and
+  // a clear lead over the next bubble (12 percentage points and 1.35x); never
   // choose an option solely because it is the darkest of four empty outlines.
   const ranked = counts.map((count, index) => ({
     index, count, density: sampleAreas[index] > 0 ? count / sampleAreas[index] : 0
   })).sort((a, b) => b.density - a.density);
   const [best, next] = ranked;
   if (best && next && best.count >= 5 &&
-      best.density >= 0.50 * thrMul &&
-      best.density - next.density >= 0.18 * thrMul &&
-      best.density >= next.density * 1.5) return [best.index];
+      best.density >= 0.45 * thrMul &&
+      best.density - next.density >= 0.12 * thrMul &&
+      best.density >= next.density * 1.35) return [best.index];
   return [];
 }
 
