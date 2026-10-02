@@ -237,15 +237,9 @@ dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1
   .review-card .print-action-row button { white-space:normal; height:100%; min-height:36px; }
   @media(max-width:640px) { .print-action-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .print-scope { grid-column:1/-1; } }
 </style>
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-FSRBCRECMR"></script>
+  <script src="analytics.js" defer></script>
 <script type="text/csv" id="embeddedStudentList">CLASS,STUDENT,ID
 </script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-FSRBCRECMR');
-  </script>
 <style id="studentReportStyles">
 .student-report { color:#172033; color-scheme:light; }
 .report-page.student-report { width:100%; max-width:210mm; min-height:0; padding:24px; box-sizing:border-box; }
@@ -295,6 +289,7 @@ button, a.button, .link-pill { min-height:30px; padding:5px 9px; font-size:12px;
     </div>
     <div class="top-actions">
       <span class="privacy-note">Your uploaded data stays in your browser</span>
+      <a class="link-pill" href="metrics.html">Usage metrics</a>
       <button id="openInstructions" type="button">Instructions</button>
       <button id="openTutorial" type="button" aria-controls="tutorialGuide" aria-expanded="false">Guided setup</button>
       <button id="startAfresh" type="button" style="border-color:#fb7185;color:#fda4af">Start afresh</button>
@@ -839,6 +834,7 @@ async function processSelectedPDFs(files) {
     return;
   }
 
+  const pagesBeforeLoad = totalPages;
   setStatus(`Loading ${pdfFiles.length} PDF${pdfFiles.length === 1 ? "" : "s"}…`);
   let loadedCount = 0;
   for (const file of pdfFiles) {
@@ -849,6 +845,10 @@ async function processSelectedPDFs(files) {
     ? `${loadedCount} PDF${loadedCount === 1 ? "" : "s"} loaded. Ready to process.`
     : "No PDFs could be loaded."
   );
+  if (loadedCount) window.markscanAnalytics?.track("pdf_selected", {
+    pdf_count: loadedCount,
+    sheet_count: totalPages - pagesBeforeLoad
+  });
   updateTutorial();
 }
 
@@ -1520,7 +1520,19 @@ async function processPDF(){
   if(directoryUploading){setStatus("Wait for the student CSV to finish saving.");return;}
   if(!studentMap.size){setStatus("Upload your student CSV before processing answer sheets.");setStudentDirectoryVisible(true);document.getElementById("studentDirectory").scrollIntoView({behavior:"smooth"});document.getElementById("studentListFile").focus();return;}
   directoryProcessing=true;document.getElementById("studentListFile").disabled=true;
+  const startedAt = performance.now();
+  const pendingSheetCount = docs.filter(doc => !doc.processed).reduce((sum, doc) => sum + doc.numPages, 0);
   try{await processPDFWithDirectory();}
+  catch(error){
+    window.markscanAnalytics?.track("processing_failed", {
+      sheet_count: pendingSheetCount,
+      duration_ms: performance.now() - startedAt
+    });
+    console.error("Processing run failed", error);
+    setStatus("Processing stopped unexpectedly. Try the PDFs again.");
+    document.getElementById("btnProcess").disabled = false;
+    document.getElementById("btnCSV").disabled = results.length === 0;
+  }
   finally{directoryProcessing=false;document.getElementById("studentListFile").disabled=false;}
 }
 async function processPDFWithDirectory(){
@@ -1537,6 +1549,13 @@ async function processPDFWithDirectory(){
     $("#btnCSV").disabled = results.length === 0;
     return;
   }
+
+  const runStartedAt = performance.now();
+  const pendingSheetCount = pendingDocs.reduce((sum, doc) => sum + doc.numPages, 0);
+  window.markscanAnalytics?.track("processing_started", {
+    pdf_count: pendingDocs.length,
+    sheet_count: pendingSheetCount
+  });
 
   const newResults = [];
   outEl.textContent="";
@@ -1776,6 +1795,12 @@ async function processPDFWithDirectory(){
   $("#btnCSV").disabled = results.length===0;
   $("#btnProcess").disabled=false;
   const failedCount = pendingDocs.filter(doc => !doc.processed).length;
+  window.markscanAnalytics?.track("processing_completed", {
+    sheet_count: pendingSheetCount,
+    successful_sheet_count: newResults.length,
+    failed_sheet_count: Math.max(0, pendingSheetCount - newResults.length),
+    duration_ms: performance.now() - runStartedAt
+  });
   setStatus(failedCount
     ? `Parsed ${newResults.length} page(s); ${failedCount} PDF${failedCount === 1 ? "" : "s"} failed.`
     : `Done. Parsed ${newResults.length} page(s) from ${pendingDocs.length} PDF${pendingDocs.length === 1 ? "" : "s"}.`
@@ -1864,6 +1889,7 @@ function downloadCSV(){
     const a=document.createElement("a"); a.href=url; a.download=filename; a.click();
     setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 30000);
   }
+  window.markscanAnalytics?.track("export_generated", { export_type: "raw_csv", item_count: results.length });
 }
 
 /* ===== Answer key helpers ===== */
@@ -1902,6 +1928,7 @@ function saveAnswerKey() {
   if (status) status.textContent = count === n
     ? `Saved ${count}/${n}`
     : `Saved ${count}/${n} — ${n - count} answers missing`;
+  window.markscanAnalytics?.track("answer_key_saved", { question_count: n });
 }
 async function clearAnswerKey() {
   if (!await confirmAction("Clear answer key?", "This deletes the saved answer key and clears the answer field. Existing results will remain but will no longer be graded until you save another key.", "Clear answer key")) return;
@@ -2071,12 +2098,14 @@ async function uploadStudentList(event) {
     studentMap=next;
     tutorialConfirmDirectory = false;
     refreshStudentDirectory(`Saved ${studentMap.size} students from ${file.name}. Ready to process answer sheets.`);
+    window.markscanAnalytics?.track("student_directory_configured", { student_count: studentMap.size });
   }catch(error){document.getElementById("studentDirectoryStatus").textContent=`Upload failed: ${error.message} Your current directory has not been changed.`;}
   finally{input.value="";input.disabled=false;directoryUploading=false;}
 }
 function downloadStudentTemplate() {
   const blob=new Blob(["\uFEFFCLASS,STUDENT,ID\r\n"],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
   link.href=url;link.download="student-directory-template.csv";link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  window.markscanAnalytics?.track("export_generated", { export_type: "student_directory_template", item_count: 0 });
 }
 
 /* ===== Summary & Reports ===== */
@@ -2135,6 +2164,7 @@ function saveCurrentStudentResponses() {
     syncIntegratedReview(false);
     renderCurrentReportPreview(currentPage);
     status.textContent = "Saved. Marks, reports and analysis updated.";
+    window.markscanAnalytics?.track("results_edited", { item_count: 1 });
   } catch (error) {
     status.textContent = error.message;
   }
@@ -2380,6 +2410,10 @@ async function printMarkedSheets(all = false) {
     progress.textContent=`${snapshots.length} marked sheet${snapshots.length===1?"":"s"} ready. Click Print / Save PDF. Use Actual size / 100%, with headers and footers off.`;
     button.disabled=false;printWindow.focus();
     setStatus("Marked sheet preview is ready in the new tab. Click Print / Save PDF there.");
+    window.markscanAnalytics?.track("report_generated", {
+      report_scope: all ? "marked_all" : "marked_current",
+      item_count: snapshots.length
+    });
   } catch(error) {
     if(!printWindow.closed){progress.textContent="Could not prepare all marked sheets. Close this tab and try again. "+error.message;button.disabled=true;}
     console.error("Marked sheet preview failed", error);
@@ -2396,6 +2430,7 @@ if (btnOpenPDF) btnOpenPDF.onclick = () => {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank");
+  window.markscanAnalytics?.track("report_generated", { report_scope: "current", item_count: 1 });
 };
 const btnDownloadAll = document.getElementById("btnDownloadAll");
 if (btnDownloadAll) btnDownloadAll.onclick = () => {
@@ -2404,6 +2439,10 @@ if (btnDownloadAll) btnDownloadAll.onclick = () => {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank");
+  window.markscanAnalytics?.track("report_generated", {
+    report_scope: "all",
+    item_count: pageSummaries.filter(Boolean).length
+  });
 };
 updateReportActionButtons();
 
@@ -2525,6 +2564,7 @@ function initCTASequence() {
   document.getElementById("tutorialConfirmExport").onclick = () => {
     if (tutorialExportStage === null || tutorialExportStage > 2) return;
     tutorialExportStep++;
+    if (tutorialExportStep === 3) window.markscanAnalytics?.track("guided_setup_completed");
     updateTutorial();
     if (tutorialTargets.length) document.getElementById("tutorialLocate").click();
     else document.getElementById("tutorialClose").focus({preventScroll:true});
@@ -3004,6 +3044,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const button = document.getElementById("integratedEditor").contentDocument?.getElementById("export");
     if (!button || button.disabled) { setStatus("Student entries are loading or empty. Process sheets and try again."); return; }
     button.click();
+    window.markscanAnalytics?.track("export_generated", { export_type: "student_entries_csv", item_count: results.length });
     document.getElementById("resultsSection").scrollIntoView({behavior:"smooth"});
   };
   document.getElementById("showClassSummary").onclick = () => showIntegratedResults("classes");

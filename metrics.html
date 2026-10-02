@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aggregate, privacy-safe usage metrics for MarkScan.">
+<title>Usage metrics | MarkScan</title>
+<script src="analytics.js" defer></script>
+<style>
+:root{color-scheme:dark;--bg:#081018;--surface:#111b24;--line:#30404d;--text:#f5f7f8;--muted:#a8b4bd;--teal:#2dd4bf;--yellow:#facc15;--coral:#fb7185;--blue:#60a5fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}
+.site-header{border-bottom:1px solid var(--line);background:#0c151d}.header-inner,.dashboard{width:min(1180px,calc(100% - 32px));margin:auto}.header-inner{min-height:72px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:12px;text-decoration:none}.brand img{width:52px;height:auto}.brand strong{display:block;font-size:16px}.brand span{display:block;color:var(--muted);font-size:12px}.nav{display:flex;align-items:center;gap:8px}.nav a{padding:8px 11px;border:1px solid var(--line);border-radius:7px;text-decoration:none;font-weight:650}.nav a[aria-current=page]{border-color:#2dd4bf88;color:#99f6e4;background:#12302d}
+.dashboard{padding:30px 0 52px}.page-heading{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:24px}.page-heading h1{margin:0;font-size:28px;letter-spacing:0}.page-heading p{max-width:650px;margin:6px 0 0;color:var(--muted)}.freshness{color:var(--muted);font-size:12px;white-space:nowrap}.status{padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted)}.status.error{border-color:#fb718566;color:#fecdd3}.status[hidden]{display:none}
+.metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:26px}.metric{min-width:0;padding:17px;border:1px solid var(--line);border-top:3px solid var(--accent,var(--teal));border-radius:8px;background:var(--surface)}.metric-label{min-height:42px;color:var(--muted);font-size:12px;font-weight:650}.metric-value{margin-top:5px;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.metric-note{min-height:20px;margin-top:7px;color:var(--muted);font-size:11px}
+.content-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.7fr);gap:22px}.section{min-width:0}.section h2{margin:0 0 4px;font-size:17px}.section-subtitle{margin:0 0 16px;color:var(--muted);font-size:12px}.chart{height:270px;display:grid;grid-template-columns:repeat(12,minmax(18px,1fr));align-items:end;gap:7px;padding:20px 12px 32px;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}.bar-column{height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:7px;min-width:0}.bar{width:min(100%,38px);min-height:2px;height:var(--bar-height);background:var(--teal);border-radius:3px 3px 0 0}.bar-value{font-size:11px;font-variant-numeric:tabular-nums}.bar-label{height:16px;color:var(--muted);font-size:10px;white-space:nowrap;transform:rotate(-38deg);transform-origin:center}
+.detail-list{border-top:1px solid var(--line)}.detail-row{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}.detail-row span{color:var(--muted)}.detail-row strong{font-size:17px;font-variant-numeric:tabular-nums;text-align:right}.privacy-band{margin-top:28px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:grid;grid-template-columns:180px 1fr;gap:24px}.privacy-band h2{margin:0;font-size:15px}.privacy-band p{margin:0;color:var(--muted)}
+.access-form{max-width:420px;margin-top:12px;display:flex;gap:8px}.access-form input{min-width:0;flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#081018;color:var(--text)}button{padding:9px 13px;border:1px solid var(--teal);border-radius:7px;background:var(--teal);color:#052824;font:inherit;font-weight:700;cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #5eead466;outline-offset:2px}
+@media(max-width:900px){.metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.content-grid{grid-template-columns:1fr}.chart{height:240px}.privacy-band{grid-template-columns:1fr}}@media(max-width:560px){.header-inner{align-items:flex-start;padding:13px 0;flex-direction:column}.nav{width:100%}.nav a{flex:1;text-align:center}.dashboard{padding-top:22px}.page-heading{align-items:flex-start;flex-direction:column}.metrics-grid{grid-template-columns:1fr 1fr;gap:8px}.metric{padding:13px}.metric-value{font-size:24px}.chart{gap:4px;padding-inline:6px}.bar-label{font-size:9px}.privacy-band{gap:8px}}
+</style>
+</head>
+<body>
+<header class="site-header"><div class="header-inner">
+  <a class="brand" href="index.html"><img src="markscanlogosmall.png" alt=""><span><strong>MarkScan</strong><span>Optical mark sheet scanner</span></span></a>
+  <nav class="nav" aria-label="Primary"><a href="index.html">Scanner</a><a href="metrics.html" aria-current="page">Usage metrics</a></nav>
+</div></header>
+<main class="dashboard">
+  <div class="page-heading"><div><h1>Usage metrics</h1><p>Aggregate product activity from consenting users. These numbers describe scanner use without collecting student or exam data.</p></div><div id="freshness" class="freshness">Loading latest data...</div></div>
+  <div id="status" class="status" role="status">Connecting to usage metrics...</div>
+  <div id="metricsContent" hidden>
+    <section class="metrics-grid" aria-label="Usage summary">
+      <article class="metric" style="--accent:var(--teal)"><div class="metric-label">Answer sheets processed</div><div class="metric-value" data-metric="total_sheets">0</div><div class="metric-note"><span data-metric="sheets_30_days">0</span> in the last 30 days</div></article>
+      <article class="metric" style="--accent:var(--blue)"><div class="metric-label">Processing runs completed</div><div class="metric-value" data-metric="completed_runs">0</div><div class="metric-note"><span data-metric="average_sheets_per_run">0</span> sheets per run</div></article>
+      <article class="metric" style="--accent:var(--yellow)"><div class="metric-label">Processing success rate</div><div class="metric-value"><span data-metric="success_rate">0</span>%</div><div class="metric-note"><span data-metric="failed_sheets">0</span> failed sheets</div></article>
+      <article class="metric" style="--accent:var(--coral)"><div class="metric-label">Reports and exports</div><div class="metric-value" data-metric="outputs_total">0</div><div class="metric-note">Generated after processing</div></article>
+    </section>
+    <div class="content-grid">
+      <section class="section"><h2>Weekly activity</h2><p class="section-subtitle">Answer sheets processed over the last 12 weeks</p><div id="weeklyChart" class="chart" role="img" aria-label="Weekly answer sheets processed"></div></section>
+      <section class="section"><h2>Operational detail</h2><p class="section-subtitle">A closer look at scanner usage</p><div class="detail-list">
+        <div class="detail-row"><span>Last 7 days</span><strong><span data-metric="sheets_7_days">0</span> sheets</strong></div>
+        <div class="detail-row"><span>Successful sheets</span><strong data-metric="successful_sheets">0</strong></div>
+        <div class="detail-row"><span>Average run time</span><strong data-metric="average_duration">0 sec</strong></div>
+        <div class="detail-row"><span>Reports generated</span><strong data-metric="reports_generated">0</strong></div>
+        <div class="detail-row"><span>Data exports</span><strong data-metric="exports_generated">0</strong></div>
+      </div></section>
+    </div>
+  </div>
+  <section class="privacy-band"><h2>What is counted</h2><p>MarkScan records event types, aggregate counts, processing duration and a random session identifier only after analytics consent. It never sends filenames, uploaded files, student names or IDs, exam titles, answers, marks or scores.</p></section>
+</main>
+<script>
+const numberFormat = new Intl.NumberFormat();
+const statusElement = document.getElementById("status");
+const contentElement = document.getElementById("metricsContent");
+function setMetric(name, value) { document.querySelectorAll(`[data-metric="${name}"]`).forEach(element => { element.textContent = value; }); }
+function renderMetrics(data) {
+  const summary = data.summary;
+  for (const key of ["total_sheets","completed_runs","failed_sheets","successful_sheets","sheets_7_days","sheets_30_days","reports_generated","exports_generated"]) setMetric(key, numberFormat.format(summary[key]));
+  setMetric("success_rate", numberFormat.format(summary.success_rate));
+  setMetric("average_sheets_per_run", numberFormat.format(summary.average_sheets_per_run));
+  setMetric("outputs_total", numberFormat.format(summary.reports_generated + summary.exports_generated));
+  setMetric("average_duration", summary.average_duration_ms < 1000 ? `${summary.average_duration_ms} ms` : `${(summary.average_duration_ms / 1000).toFixed(1)} sec`);
+  const maximum = Math.max(1, ...data.weekly.map(item => item.sheets));
+  const chart = document.getElementById("weeklyChart");
+  chart.replaceChildren(...data.weekly.map(item => {
+    const date = new Date(`${item.week}T00:00:00Z`);
+    const column = document.createElement("div");
+    column.className = "bar-column";
+    column.title = `${numberFormat.format(item.sheets)} sheets in ${numberFormat.format(item.runs)} runs, week of ${date.toLocaleDateString()}`;
+    column.innerHTML = `<span class="bar-value">${numberFormat.format(item.sheets)}</span><span class="bar" style="--bar-height:${Math.max(2, item.sheets / maximum * 180)}px"></span><span class="bar-label">${date.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span>`;
+    return column;
+  }));
+  document.getElementById("freshness").textContent = `Updated ${new Date(data.generated_at).toLocaleString()}`;
+  statusElement.hidden = true;
+  contentElement.hidden = false;
+}
+function renderAccessForm() {
+  statusElement.className = "status";
+  statusElement.innerHTML = `<strong>Metrics access is protected.</strong><form class="access-form"><input name="token" type="password" autocomplete="current-password" aria-label="Metrics access token" placeholder="Access token" required><button>Open</button></form>`;
+  statusElement.querySelector("form").addEventListener("submit", event => { event.preventDefault(); sessionStorage.setItem("markscan.metrics-token", new FormData(event.target).get("token")); loadMetrics(); });
+}
+async function loadMetrics() {
+  statusElement.textContent = "Connecting to usage metrics...";
+  statusElement.className = "status";
+  const token = sessionStorage.getItem("markscan.metrics-token");
+  try {
+    const response = await fetch("/api/metrics", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (response.status === 401) return renderAccessForm();
+    const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : {};
+    if (!response.ok) throw new Error(data.error || (response.status === 404 ? "api_unavailable" : "request_failed"));
+    renderMetrics(data);
+  } catch (error) {
+    statusElement.className = "status error";
+    statusElement.textContent = ["database_not_configured", "api_unavailable"].includes(error.message)
+      ? "Usage metrics will appear after the Vercel deployment is connected to Neon."
+      : "Usage metrics are temporarily unavailable. Please try again later.";
+    document.getElementById("freshness").textContent = "Not available";
+  }
+}
+loadMetrics();
+</script>
+</body>
+</html>
