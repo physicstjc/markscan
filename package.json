@@ -1,0 +1,12 @@
+{
+  "name": "markscan",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes --cache .npm-cache vercel@62.1.0 dev",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": { "@neondatabase/serverless": "^1.2.0" }
+}

@@ -106,7 +106,7 @@ async function refresh(myRevision){
 function queueRefresh(){revision++;latest=null;download.disabled=true;if(renderTask)renderTask.cancel();clearTimeout(timer);save(readForm());status.className='status';status.textContent='Updating preview…';const current=revision;timer=setTimeout(()=>refresh(current),250);}
 let initial={...DEFAULTS};try{const saved=JSON.parse(localStorage.getItem(storageKey));if(saved&&typeof saved==='object')for(const id of ids)if(typeof saved[id]===typeof DEFAULTS[id])initial[id]=saved[id];}catch{}
 setForm(initial);for(const element of Object.values(elements))element.addEventListener('input',queueRefresh);
-download.addEventListener('click',()=>{if(!latest)return;const url=URL.createObjectURL(new Blob([latest],{type:'application/pdf'})),link=document.createElement('a');link.href=url;link.download=(readForm().title.replace(/[^a-z0-9 _-]/gi,'').trim().slice(0,80)||'OMS template')+'.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);});
+download.addEventListener('click',()=>{if(!latest)return;const url=URL.createObjectURL(new Blob([latest],{type:'application/pdf'})),link=document.createElement('a');link.href=url;link.download=(readForm().title.replace(/[^a-z0-9 _-]/gi,'').trim().slice(0,80)||'OMS template')+'.pdf';link.click();window.markscanAnalytics?.track('export_generated',{export_type:'answer_sheet_template',item_count:1});setTimeout(()=>URL.revokeObjectURL(url),30000);});
 const resetDialog=document.getElementById('resetDialog');document.getElementById('reset').addEventListener('click',()=>resetDialog.showModal());resetDialog.addEventListener('close',()=>{if(resetDialog.returnValue==='restore'){setForm(DEFAULTS);queueRefresh();}});
 refresh(revision);
 })();
