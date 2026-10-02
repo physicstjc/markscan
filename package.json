@@ -7,6 +7,6 @@
     "dev": "npx --yes --cache .npm-cache vercel@62.1.0 dev",
     "test": "node --test"
   },
-  "engines": { "node": ">=20" },
+  "engines": { "node": "24.x" },
   "dependencies": { "@neondatabase/serverless": "^1.2.0" }
 }
